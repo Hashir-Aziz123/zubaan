@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+
+# Project artifacts
+data/*
+!data/README.md
+outputs/
+reports/
+*.gguf
+*.safetensors
+*.bin
+wandb/
+site/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Secrets and local config
+.env
+*.local.json
+.claude/settings.local.json
+
+# OS
+.DS_Store

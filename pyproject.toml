@@ -1,0 +1,77 @@
+[project]
+name = "zubaan"
+version = "0.0.1"
+description = "Measure and remove the inference tax that non-English languages pay: tokenizer extension, matching speculative decoding drafters, and deployable exports."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [{ name = "Alyan Ahmed Memon" }]
+keywords = ["llm", "tokenizer", "speculative-decoding", "urdu", "inference", "gguf", "vllm"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Development Status :: 2 - Pre-Alpha",
+]
+# Core dependencies stay light so the CLI installs fast on CPU-only machines.
+dependencies = [
+    "typer>=0.12",
+    "rich>=13",
+    "pydantic>=2.6",
+    "pyyaml>=6",
+]
+
+[project.optional-dependencies]
+# Stage 1: tokenizer statistics and acceptance-rate measurement.
+audit = [
+    "transformers>=4.45",
+    "tokenizers>=0.20",
+    "datasets>=3.0",
+    "numpy>=1.26",
+]
+# Stages 2 to 4: extension, continued pretraining, drafter training. Usually installed on Kaggle.
+train = [
+    "zubaan[audit]",
+    "torch>=2.3",
+    "peft>=0.12",
+    "trl>=0.12",
+    "accelerate>=0.34",
+]
+# Stage 5: benchmarking running servers.
+bench = [
+    "openai>=1.40",
+    "httpx>=0.27",
+    "matplotlib>=3.8",
+]
+docs = ["mkdocs-material>=9.5"]
+all = ["zubaan[train,bench,docs]"]
+
+[project.scripts]
+zubaan = "zubaan.cli:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/zubaan"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: needs model downloads or large data; skipped in CI",
+    "gpu: needs a CUDA GPU; run on Kaggle",
+]
+addopts = "-m 'not slow and not gpu'"

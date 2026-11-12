@@ -1,0 +1,12 @@
+site_name: zubaan
+site_description: Measure and remove the inference tax non-English languages pay on LLMs.
+theme:
+  name: material
+nav:
+  - Home: index.md
+  - Roadmap: roadmap.md
+  - Decisions: decisions.md
+markdown_extensions:
+  - tables
+  - admonition
+  - pymdownx.superfences

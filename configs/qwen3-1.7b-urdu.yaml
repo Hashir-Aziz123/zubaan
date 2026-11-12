@@ -1,0 +1,23 @@
+# Example run config. Load with zubaan.config.load_config.
+
+audit:
+  tokenizer: Qwen/Qwen3-1.7B
+  corpus: data/flores_urd.txt
+  reference_corpus: data/flores_eng.txt
+  normalize: true
+
+extend:
+  base_model: Qwen/Qwen3-1.7B
+  corpus: data/urdu_train.txt
+  n_new_tokens: 10000
+  init_method: mean
+  output_dir: outputs/qwen3-1.7b-urdu-extended
+
+adapt:
+  model_path: outputs/qwen3-1.7b-urdu-extended
+  corpus: data/urdu_cpt.txt
+  english_replay_ratio: 0.1
+  lora_rank: 16
+  learning_rate: 2.0e-4
+  max_seq_length: 2048
+  output_dir: outputs/qwen3-1.7b-urdu-adapted
