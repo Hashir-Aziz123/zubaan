@@ -11,8 +11,8 @@ dist/
 # Project artifacts
 data/*
 !data/README.md
-outputs/
-reports/
+/outputs/
+/reports/
 *.gguf
 *.safetensors
 *.bin

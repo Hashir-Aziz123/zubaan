@@ -6,6 +6,8 @@ nav:
   - Home: index.md
   - Roadmap: roadmap.md
   - Decisions: decisions.md
+  - Reports:
+      - The Urdu language tax: reports/urdu-language-tax/index.md
 markdown_extensions:
   - tables
   - admonition

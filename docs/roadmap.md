@@ -10,8 +10,8 @@ Each stage ends with something usable and public. Estimates assume part-time wor
 - [x] Data script: `zubaan data flores` downloads FLORES-200 devtest `urd_Arab` and `eng_Latn` into `data/`
 - [x] First real audit: Qwen3-1.7B fertility on FLORES, with sanity checks and provenance (Urdu 3.12 vs English 1.24 tokens per word, 3.14x cost)
 - [x] Multi-model audit: `zubaan audit compare` across popular tokenizers, CSV and JSON table (Qwen3 3.14x is among the worst; BLOOM 1.35x is the best measured)
-- [ ] `audit acceptance`: draft/target acceptance on Urdu and English (transformers, CPU for 0.6B/1.7B, Kaggle notebook for the full corpus)
-- [ ] Report: "The Urdu language tax" (Markdown plus charts), published on the docs site
+- [ ] `audit acceptance`: draft/target acceptance on Urdu and English. Code, tests and Kaggle notebook done; the real Qwen3 run is pending (local run stopped for lack of RAM)
+- [ ] Report: "The Urdu language tax" (Markdown plus charts) in `docs/reports/urdu-language-tax/`. Tokenizer sections done; acceptance section waits for the run above
 
 ## Stage 2: extend and export (2 to 3 weeks)
 
