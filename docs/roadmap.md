@@ -7,10 +7,11 @@ Each stage ends with something usable and public. Estimates assume part-time wor
 - [x] Urdu normalization and word splitting
 - [x] Fertility: tokens per word, chars per token, cost multiplier on parallel corpora
 - [x] Acceptance-rate and speedup math (dependency-free)
-- [ ] Data script: download FLORES-200 `urd_Arab` and `eng_Latn` into `data/`
-- [ ] `audit acceptance`: compute acceptance from draft and target next-token distributions on a corpus (transformers, CPU for 0.6B/1.7B pairs, Kaggle for larger)
-- [ ] Multi-model audit: run across popular small models, output a comparison table
-- [ ] Report: "The Urdu language tax" (Markdown plus charts), published
+- [x] Data script: `zubaan data flores` downloads FLORES-200 devtest `urd_Arab` and `eng_Latn` into `data/`
+- [ ] First real audit: Qwen3-1.7B fertility on FLORES, with sanity checks and provenance
+- [ ] Multi-model audit: `zubaan audit compare` across popular tokenizers, CSV and JSON table
+- [ ] `audit acceptance`: draft/target acceptance on Urdu and English (transformers, CPU for 0.6B/1.7B, Kaggle notebook for the full corpus)
+- [ ] Report: "The Urdu language tax" (Markdown plus charts), published on the docs site
 
 ## Stage 2: extend and export (2 to 3 weeks)
 

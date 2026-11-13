@@ -14,6 +14,7 @@ The pipeline, one CLI command per stage:
 
 | Command | Purpose | Stage |
 | --- | --- | --- |
+| `zubaan data flores` | Download FLORES-200 parallel sentences into `data/` | 1 |
 | `zubaan audit fertility` | Tokens per word, chars per token, cost vs a parallel reference corpus | 1 (done: v0) |
 | `zubaan audit acceptance` | Draft/target acceptance rate on a corpus | 1 |
 | `zubaan extend` | Add target-language merges, resize and initialize embeddings | 2 |

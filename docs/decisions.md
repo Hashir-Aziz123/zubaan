@@ -21,3 +21,7 @@ Qwen3-1.7B as the target and Qwen3-0.6B as the drafter. Sized for free Kaggle GP
 ## 2026-11-12: Extension via real merges
 
 New tokens are added as BPE merges with the base pre-tokenizer unchanged, not as `added_tokens`. This keeps tokenization natural and makes GGUF export possible by mapping to the base pre-tokenizer type.
+
+## 2026-11-13: Evaluation data is FLORES-200 devtest, from Meta's archive by default
+
+All Stage 1 measurements use the 1,012 `devtest` sentences in `urd_Arab` and `eng_Latn`. The `dev` split stays unused so it can serve later as held-out data (for example imatrix calibration) without touching the test set. The default source is the original FLORES-200 archive from Meta: it needs no login, never changes (its SHA-256 is recorded in `data/flores_meta.json`), and is the version used by the papers we compare against. FLORES+ (`openlanguagedata/flores_plus`, gated) is available with `--source hf`; mixing sources silently would make results depend on who ran them, so `auto` is opt-in.

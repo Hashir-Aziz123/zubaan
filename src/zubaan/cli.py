@@ -20,6 +20,8 @@ app = typer.Typer(
 )
 audit_app = typer.Typer(help="Stage 1: measure the language tax.", no_args_is_help=True)
 app.add_typer(audit_app, name="audit")
+data_app = typer.Typer(help="Download evaluation data.", no_args_is_help=True)
+app.add_typer(data_app, name="data")
 
 console = Console()
 
@@ -39,6 +41,28 @@ def load_tokenizer(name: str):
 def version() -> None:
     """Print the installed version."""
     console.print(__version__)
+
+
+@data_app.command("flores")
+def data_flores(
+    lang: Annotated[str, typer.Option(help="Target FLORES language code")] = "urd_Arab",
+    ref: Annotated[str, typer.Option(help="Reference FLORES language code")] = "eng_Latn",
+    split: Annotated[str, typer.Option(help="dev or devtest")] = "devtest",
+    out: Annotated[Path, typer.Option(help="Output directory")] = Path("data"),
+    source: Annotated[
+        str, typer.Option(help="meta (FLORES-200), hf (FLORES+, gated) or auto")
+    ] = "meta",
+) -> None:
+    """Download parallel FLORES sentences, one per line, aligned across languages."""
+    from zubaan.data.flores import download_flores
+
+    result = download_flores([lang, ref], split=split, out_dir=out, source=source)
+    console.print(f"FLORES {split} from [bold]{result.meta['source']}[/]: {result.n_lines} lines")
+    if "fallback_reason" in result.meta:
+        console.print(f"[yellow]Hugging Face not used:[/] {result.meta['fallback_reason']}")
+    for path in result.paths.values():
+        console.print(f"  {path}")
+    console.print(f"  {out / 'flores_meta.json'}")
 
 
 @audit_app.command("fertility")
