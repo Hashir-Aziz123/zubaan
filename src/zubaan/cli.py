@@ -11,8 +11,10 @@ from rich.console import Console
 from rich.table import Table
 
 from zubaan import __version__
-from zubaan.audit.fertility import FertilityResult, compute_fertility, cost_multiplier
+from zubaan.audit.fertility import fertility_report
+from zubaan.config import load_config
 from zubaan.io import read_lines
+from zubaan.provenance import run_metadata, write_json
 
 app = typer.Typer(
     help="Measure and remove the inference tax non-English languages pay.",
@@ -35,6 +37,16 @@ def load_tokenizer(name: str):
             "This command needs the audit extra: pip install 'zubaan[audit]'"
         ) from e
     return AutoTokenizer.from_pretrained(name)
+
+
+def _section(config: Path | None, name: str):
+    """One section of a YAML config, or None when no config was given."""
+    if config is None:
+        return None
+    section = getattr(load_config(config), name)
+    if section is None:
+        raise typer.BadParameter(f"{config} has no '{name}' section")
+    return section
 
 
 @app.command()
@@ -67,12 +79,16 @@ def data_flores(
 
 @audit_app.command("fertility")
 def audit_fertility(
-    tokenizer: Annotated[str, typer.Option("--tokenizer", "-t", help="HF repo id or local path")],
+    tokenizer: Annotated[
+        Optional[str],  # noqa: UP045 - Typer needs Optional on Python 3.10
+        typer.Option("--tokenizer", "-t", help="HF repo id or local path"),
+    ] = None,
     corpus: Annotated[
-        Path, typer.Option("--corpus", "-c", exists=True, help="Target-language file")
-    ],
+        Optional[Path],  # noqa: UP045
+        typer.Option("--corpus", "-c", exists=True, help="Target-language file"),
+    ] = None,
     reference: Annotated[
-        Optional[Path],  # noqa: UP045 - Typer needs Optional on Python 3.10
+        Optional[Path],  # noqa: UP045
         typer.Option("--reference", "-r", exists=True, help="Parallel reference-language file"),
     ] = None,
     max_texts: Annotated[
@@ -80,40 +96,68 @@ def audit_fertility(
         typer.Option(help="Use only the first N lines"),
     ] = None,
     no_normalize: Annotated[bool, typer.Option(help="Skip Urdu normalization")] = False,
+    examples: Annotated[int, typer.Option(help="Show how the first N sentences split")] = 0,
+    config: Annotated[
+        Optional[Path],  # noqa: UP045
+        typer.Option("--config", exists=True, help="YAML config with an audit section"),
+    ] = None,
+    out: Annotated[
+        Optional[Path],  # noqa: UP045
+        typer.Option("--out", help="Save the JSON result (with provenance) here"),
+    ] = None,
     as_json: Annotated[bool, typer.Option("--json", help="Print machine-readable JSON")] = False,
 ) -> None:
-    """Tokens per word and characters per token, plus cost versus a reference language."""
+    """Tokens per word and characters per token, plus cost versus a reference language.
+
+    Flags override values from --config.
+    """
+    cfg = _section(config, "audit")
+    tokenizer = tokenizer or (cfg.tokenizer if cfg else None)
+    corpus = corpus or (cfg.corpus if cfg else None)
+    reference = reference or (cfg.reference_corpus if cfg else None)
+    max_texts = max_texts or (cfg.max_texts if cfg else None)
+    normalize = not no_normalize and (cfg.normalize if cfg else True)
+    if tokenizer is None or corpus is None:
+        raise typer.BadParameter("give --tokenizer and --corpus, or a --config with them")
+
     tok = load_tokenizer(tokenizer)
-    target = compute_fertility(tok, read_lines(corpus, max_texts), normalize=not no_normalize)
-    ref: FertilityResult | None = None
-    if reference is not None:
-        ref = compute_fertility(tok, read_lines(reference, max_texts), normalize=False)
+    ref_texts = read_lines(reference, max_texts) if reference is not None else None
+    result = fertility_report(
+        tok, tokenizer, read_lines(corpus, max_texts), ref_texts, normalize, examples
+    )
+    result["provenance"] = run_metadata([tokenizer], corpus.parent / "flores_meta.json")
+    if out is not None:
+        write_json(result, out)
 
     if as_json:
-        out = {"tokenizer": tokenizer, "target": target.to_dict()}
-        if ref is not None:
-            out["reference"] = ref.to_dict()
-            out["cost_multiplier"] = cost_multiplier(target, ref)
-        console.print_json(json.dumps(out))
+        console.print_json(json.dumps(result, ensure_ascii=False))
         return
 
     table = Table(title=f"Fertility: {tokenizer}")
     table.add_column("Corpus")
-    for col in ("Texts", "Words", "Tokens", "Tokens/word", "Chars/token"):
+    for col in ("Texts", "Words", "Tokens", "Tokens/word", "Chars/token", "Lossless"):
         table.add_column(col, justify="right")
-    rows = [("target", target)] + ([("reference", ref)] if ref is not None else [])
-    for name, r in rows:
+    for name in ("target", "reference"):
+        if name not in result:
+            continue
+        r, c = result[name], result[f"{name}_checks"]
         table.add_row(
             name,
-            str(r.n_texts),
-            str(r.n_words),
-            str(r.n_tokens),
-            f"{r.tokens_per_word:.2f}",
-            f"{r.chars_per_token:.2f}",
+            str(r["n_texts"]),
+            str(r["n_words"]),
+            str(r["n_tokens"]),
+            f"{r['tokens_per_word']:.2f}",
+            f"{r['chars_per_token']:.2f}",
+            "yes" if c["lossless"] else f"[red]no[/] ({c['n_unk']} unk)",
         )
     console.print(table)
-    if ref is not None:
-        console.print(f"Cost multiplier vs reference: [bold]{cost_multiplier(target, ref):.2f}x[/]")
+    if "cost_multiplier" in result:
+        console.print(f"Cost multiplier vs reference: [bold]{result['cost_multiplier']:.2f}x[/]")
+    for name, pieces_list in result.get("examples", {}).items():
+        for pieces in pieces_list:
+            console.print(f"{name}: " + " | ".join(repr(p) for p in pieces))
+    if out is not None:
+        console.print(f"Saved {out}")
 
 
 def _planned(stage: int, what: str) -> None:

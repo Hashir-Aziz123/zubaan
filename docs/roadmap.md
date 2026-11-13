@@ -8,7 +8,7 @@ Each stage ends with something usable and public. Estimates assume part-time wor
 - [x] Fertility: tokens per word, chars per token, cost multiplier on parallel corpora
 - [x] Acceptance-rate and speedup math (dependency-free)
 - [x] Data script: `zubaan data flores` downloads FLORES-200 devtest `urd_Arab` and `eng_Latn` into `data/`
-- [ ] First real audit: Qwen3-1.7B fertility on FLORES, with sanity checks and provenance
+- [x] First real audit: Qwen3-1.7B fertility on FLORES, with sanity checks and provenance (Urdu 3.12 vs English 1.24 tokens per word, 3.14x cost)
 - [ ] Multi-model audit: `zubaan audit compare` across popular tokenizers, CSV and JSON table
 - [ ] `audit acceptance`: draft/target acceptance on Urdu and English (transformers, CPU for 0.6B/1.7B, Kaggle notebook for the full corpus)
 - [ ] Report: "The Urdu language tax" (Markdown plus charts), published on the docs site
