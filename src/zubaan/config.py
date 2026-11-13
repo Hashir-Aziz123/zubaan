@@ -18,6 +18,15 @@ class AuditConfig(BaseModel):
     max_texts: int | None = None
 
 
+class CompareConfig(BaseModel):
+    models: list[str] = Field(description="Tokenizers to compare (HF repo ids or local paths)")
+    corpus: Path = Field(description="Target-language file, one text per line")
+    reference_corpus: Path = Field(description="Parallel reference-language file")
+    normalize: bool = True
+    max_texts: int | None = None
+    output_dir: Path = Path("reports")
+
+
 class ExtendConfig(BaseModel):
     base_model: str
     corpus: Path
@@ -40,6 +49,7 @@ class ProjectConfig(BaseModel):
     """Top-level config file: any section may be omitted."""
 
     audit: AuditConfig | None = None
+    compare: CompareConfig | None = None
     extend: ExtendConfig | None = None
     adapt: AdaptConfig | None = None
 

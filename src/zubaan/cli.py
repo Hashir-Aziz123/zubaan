@@ -160,6 +160,95 @@ def audit_fertility(
         console.print(f"Saved {out}")
 
 
+@audit_app.command("compare")
+def audit_compare(
+    tokenizers: Annotated[
+        Optional[list[str]],  # noqa: UP045
+        typer.Option("--tokenizer", "-t", help="Tokenizer to include; repeat for several"),
+    ] = None,
+    corpus: Annotated[
+        Optional[Path],  # noqa: UP045
+        typer.Option("--corpus", "-c", exists=True, help="Target-language file"),
+    ] = None,
+    reference: Annotated[
+        Optional[Path],  # noqa: UP045
+        typer.Option("--reference", "-r", exists=True, help="Parallel reference-language file"),
+    ] = None,
+    max_texts: Annotated[
+        Optional[int],  # noqa: UP045
+        typer.Option(help="Use only the first N lines"),
+    ] = None,
+    out_dir: Annotated[
+        Optional[Path],  # noqa: UP045
+        typer.Option("--out-dir", help="Where compare.csv and compare.json go"),
+    ] = None,
+    config: Annotated[
+        Optional[Path],  # noqa: UP045
+        typer.Option("--config", exists=True, help="YAML config with a compare section"),
+    ] = None,
+) -> None:
+    """Fertility for several tokenizers on the same parallel data, as one table.
+
+    Tokenizers that cannot be loaded (for example gated ones) are skipped, not fatal.
+    """
+    from zubaan.audit.compare import compare_tokenizers, write_csv
+
+    cfg = _section(config, "compare")
+    tokenizers = tokenizers or (cfg.models if cfg else None)
+    corpus = corpus or (cfg.corpus if cfg else None)
+    reference = reference or (cfg.reference_corpus if cfg else None)
+    max_texts = max_texts or (cfg.max_texts if cfg else None)
+    out_dir = out_dir or (cfg.output_dir if cfg else Path("reports"))
+    normalize = cfg.normalize if cfg else True
+    if not tokenizers or corpus is None or reference is None:
+        raise typer.BadParameter("give --tokenizer, --corpus and --reference, or a --config")
+
+    def progress(row: dict) -> None:
+        if row["status"] == "skipped":
+            console.print(f"[yellow]skipped[/] {row['model']}: {row['reason']}")
+        else:
+            console.print(f"[green]done[/] {row['model']}")
+
+    rows = compare_tokenizers(
+        tokenizers,
+        read_lines(corpus, max_texts),
+        read_lines(reference, max_texts),
+        load_tokenizer,
+        normalize,
+        on_row=progress,
+    )
+    measured = [r for r in rows if r["status"] != "skipped"]
+    result = {
+        "corpus": str(corpus),
+        "reference_corpus": str(reference),
+        "normalize": normalize,
+        "rows": rows,
+        "provenance": run_metadata(tokenizers, corpus.parent / "flores_meta.json"),
+    }
+    write_json(result, out_dir / "compare.json")
+    write_csv(rows, out_dir / "compare.csv")
+
+    table = Table(title="Tokenizer comparison, sorted by cost multiplier")
+    table.add_column("Model", no_wrap=True)
+    for col in ("Vocab", "Target tok/word", "Ref tok/word", "Cost"):
+        table.add_column(col, justify="right")
+    table.add_column("Status")
+    for r in measured:
+        table.add_row(
+            r["model"],
+            f"{r['vocab_size']:,}",
+            f"{r['target_tokens_per_word']:.2f}",
+            f"{r['reference_tokens_per_word']:.2f}",
+            f"{r['cost_multiplier']:.2f}x",
+            r["status"],
+        )
+    console.print(table)
+    console.print(f"Saved {out_dir / 'compare.csv'} and {out_dir / 'compare.json'}")
+    if not measured:
+        console.print("[red]No tokenizer could be loaded.[/]")
+        raise typer.Exit(code=1)
+
+
 def _planned(stage: int, what: str) -> None:
     console.print(f"[yellow]Not implemented yet.[/] Planned for stage {stage}: {what}")
     raise typer.Exit(code=1)

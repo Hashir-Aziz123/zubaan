@@ -1,0 +1,20 @@
+# Tokenizer comparison on FLORES-200 devtest. Run with:
+#   uv run zubaan audit compare --config configs/audit-compare.yaml
+# Only tokenizer files are downloaded (a few MB each), so model size does not matter here.
+# Gated models (Gemma, Llama) need their license accepted on Hugging Face; if access is
+# missing they are reported as skipped and the rest still run.
+
+compare:
+  models:
+    - Qwen/Qwen3-1.7B                        # our target model (151k vocab)
+    - google/gemma-3-1b-it                   # gated; 262k multilingual vocab
+    - meta-llama/Llama-3.2-1B                # gated; most used open family (128k)
+    - mistralai/Mistral-7B-Instruct-v0.3     # older 32k SentencePiece vocab
+    - mistralai/Mistral-Nemo-Instruct-2407   # Mistral's newer Tekken tokenizer (131k)
+    - microsoft/Phi-4-mini-instruct          # 200k vocab
+    - openai/gpt-oss-20b                     # o200k_harmony, OpenAI's open-weight tokenizer
+    - bigscience/bloom-560m                  # reference: trained with Urdu in its data
+  corpus: data/flores_urd.txt
+  reference_corpus: data/flores_eng.txt
+  normalize: true
+  output_dir: reports
