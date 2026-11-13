@@ -27,6 +27,25 @@ class CompareConfig(BaseModel):
     output_dir: Path = Path("reports")
 
 
+class AcceptanceConfig(BaseModel):
+    draft: str = Field(description="Draft (small) model repo id or path")
+    target: str = Field(description="Target (verifier) model; must share the draft's vocabulary")
+    corpus: Path = Field(description="Target-language file, one text per line")
+    reference_corpus: Path | None = Field(default=None, description="Parallel reference file")
+    target_lang: str = "urd"
+    reference_lang: str = "eng"
+    normalize: bool = True
+    max_texts: int | None = 50
+    dtype: str = Field(default="bfloat16", description="float32 | bfloat16 | float16")
+    device: str = "cpu"
+    mode: str = Field(default="joint", description="joint (both loaded) | sequential")
+    chunk_size: int = 16
+    draft_cost: float | None = Field(
+        default=None, description="Draft step time / target step time; None = parameter ratio"
+    )
+    output: Path = Path("reports/acceptance.json")
+
+
 class ExtendConfig(BaseModel):
     base_model: str
     corpus: Path
@@ -50,6 +69,7 @@ class ProjectConfig(BaseModel):
 
     audit: AuditConfig | None = None
     compare: CompareConfig | None = None
+    acceptance: AcceptanceConfig | None = None
     extend: ExtendConfig | None = None
     adapt: AdaptConfig | None = None
 

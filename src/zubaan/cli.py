@@ -24,6 +24,8 @@ audit_app = typer.Typer(help="Stage 1: measure the language tax.", no_args_is_he
 app.add_typer(audit_app, name="audit")
 data_app = typer.Typer(help="Download evaluation data.", no_args_is_help=True)
 app.add_typer(data_app, name="data")
+report_app = typer.Typer(help="Build reports from saved results.", no_args_is_help=True)
+app.add_typer(report_app, name="report")
 
 console = Console()
 
@@ -249,15 +251,145 @@ def audit_compare(
         raise typer.Exit(code=1)
 
 
+@report_app.command("tax")
+def report_tax(
+    compare: Annotated[Path, typer.Option(help="Output of audit compare")] = Path(
+        "reports/compare.json"
+    ),
+    acceptance: Annotated[Path, typer.Option(help="Output of audit acceptance")] = Path(
+        "reports/acceptance_qwen3.json"
+    ),
+    target_model: Annotated[str, typer.Option(help="Model highlighted in the report")] = (
+        "Qwen/Qwen3-1.7B"
+    ),
+    out: Annotated[Path, typer.Option(help="Report directory")] = Path(
+        "docs/reports/urdu-language-tax"
+    ),
+) -> None:
+    """Write "The Urdu language tax" report (Markdown plus PNG charts)."""
+    from zubaan.report.tax import build_report
+
+    if not acceptance.exists():
+        console.print(f"[yellow]{acceptance} not found; the acceptance section is left empty.[/]")
+    path = build_report(compare, acceptance, out, target_model)
+    console.print(f"Wrote {path}")
+
+
 def _planned(stage: int, what: str) -> None:
     console.print(f"[yellow]Not implemented yet.[/] Planned for stage {stage}: {what}")
     raise typer.Exit(code=1)
 
 
 @audit_app.command("acceptance")
-def audit_acceptance() -> None:
-    """Speculative decoding acceptance rate of a draft/target pair on a corpus."""
-    _planned(1, "acceptance rates from model distributions")
+def audit_acceptance(
+    draft: Annotated[
+        Optional[str],  # noqa: UP045
+        typer.Option("--draft", "-d", help="Draft model"),
+    ] = None,
+    target: Annotated[
+        Optional[str],  # noqa: UP045
+        typer.Option("--target", "-t", help="Target model (same vocabulary as the draft)"),
+    ] = None,
+    corpus: Annotated[
+        Optional[Path],  # noqa: UP045
+        typer.Option("--corpus", "-c", exists=True, help="Target-language file"),
+    ] = None,
+    reference: Annotated[
+        Optional[Path],  # noqa: UP045
+        typer.Option("--reference", "-r", exists=True, help="Parallel reference-language file"),
+    ] = None,
+    max_texts: Annotated[
+        Optional[int],  # noqa: UP045
+        typer.Option(help="Use only the first N lines of each file"),
+    ] = None,
+    dtype: Annotated[
+        Optional[str],  # noqa: UP045
+        typer.Option(help="float32, bfloat16 or float16"),
+    ] = None,
+    device: Annotated[Optional[str], typer.Option(help="cpu or cuda")] = None,  # noqa: UP045
+    mode: Annotated[
+        Optional[str],  # noqa: UP045
+        typer.Option(help="joint (both models loaded) or sequential (one at a time)"),
+    ] = None,
+    out: Annotated[
+        Optional[Path],  # noqa: UP045
+        typer.Option("--out", help="Where to save the JSON result"),
+    ] = None,
+    config: Annotated[
+        Optional[Path],  # noqa: UP045
+        typer.Option("--config", exists=True, help="YAML config with an acceptance section"),
+    ] = None,
+) -> None:
+    """Speculative decoding acceptance of a draft/target pair, target language vs reference.
+
+    Flags override values from --config. The speedup shown is modelled, not measured.
+    """
+    from zubaan.config import AcceptanceConfig
+
+    cfg = _section(config, "acceptance")
+    values = cfg.model_dump() if cfg else {}
+    flags = {
+        "draft": draft,
+        "target": target,
+        "corpus": corpus,
+        "reference_corpus": reference,
+        "max_texts": max_texts,
+        "dtype": dtype,
+        "device": device,
+        "mode": mode,
+        "output": out,
+    }
+    values.update({k: v for k, v in flags.items() if v is not None})
+    if not {"draft", "target", "corpus"} <= values.keys():
+        raise typer.BadParameter("give --draft, --target and --corpus, or a --config")
+    cfg = AcceptanceConfig.model_validate(values)
+
+    from zubaan.audit.acceptance_lm import acceptance_report
+
+    texts = {cfg.target_lang: read_lines(cfg.corpus, cfg.max_texts)}
+    if cfg.reference_corpus is not None:
+        texts[cfg.reference_lang] = read_lines(cfg.reference_corpus, cfg.max_texts)
+
+    def progress(lang: str, n: int, total: int) -> None:
+        if n == total or n % 10 == 0:
+            console.print(f"  {lang}: {n}/{total} texts")
+
+    result = acceptance_report(
+        cfg.draft,
+        cfg.target,
+        texts,
+        normalize_lang=cfg.target_lang if cfg.normalize else None,
+        dtype=cfg.dtype,
+        device=cfg.device,
+        mode=cfg.mode,
+        chunk_size=cfg.chunk_size,
+        draft_cost=cfg.draft_cost,
+        on_text=progress,
+    )
+    result["provenance"] = run_metadata(
+        [cfg.draft, cfg.target], cfg.corpus.parent / "flores_meta.json"
+    )
+    write_json(result, cfg.output)
+
+    table = Table(title=f"Acceptance: draft {cfg.draft}, target {cfg.target}")
+    table.add_column("Language")
+    for col in ("Texts", "Positions", "alpha", "95% CI", "Greedy match", "Speedup g=4"):
+        table.add_column(col, justify="right")
+    for lang, r in result["languages"].items():
+        g4 = next(s for s in r["speedup"] if s["gamma"] == 4)
+        table.add_row(
+            lang,
+            str(r["n_texts"]),
+            str(r["n_positions"]),
+            f"{r['alpha']:.3f}",
+            f"[{r['alpha_ci_low']:.3f}, {r['alpha_ci_high']:.3f}]",
+            f"{r['greedy_match']:.3f}",
+            f"{g4['speedup']:.2f}x",
+        )
+    console.print(table)
+    cost = next(iter(result["languages"].values()))["draft_cost"]
+    console.print(f"Modelled speedup with draft cost c = {cost:.2f}; not measured (see stage 5).")
+    console.print(f"Saved {cfg.output}")
 
 
 @app.command()

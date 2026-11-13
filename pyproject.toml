@@ -27,6 +27,8 @@ audit = [
     "tokenizers>=0.20",
     "datasets>=3.0",
     "numpy>=1.26",
+    # Model forward passes for audit acceptance. CPU build on Windows by default.
+    "torch>=2.3",
 ]
 # Stages 2 to 4: extension, continued pretraining, drafter training. Usually installed on Kaggle.
 train = [
@@ -42,8 +44,10 @@ bench = [
     "httpx>=0.27",
     "matplotlib>=3.8",
 ]
+# Charts for reports.
+report = ["matplotlib>=3.8"]
 docs = ["mkdocs-material>=9.5"]
-all = ["zubaan[train,bench,docs]"]
+all = ["zubaan[train,bench,report,docs]"]
 
 [project.scripts]
 zubaan = "zubaan.cli:app"

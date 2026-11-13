@@ -18,6 +18,7 @@ The pipeline, one CLI command per stage:
 | `zubaan audit fertility` | Tokens per word, chars per token, cost vs a parallel reference corpus | 1 (done) |
 | `zubaan audit compare` | Fertility for several tokenizers on the same data, CSV and JSON table | 1 |
 | `zubaan audit acceptance` | Draft/target acceptance rate on a corpus | 1 |
+| `zubaan report tax` | "The Urdu language tax" report: Markdown plus charts in `docs/reports/` | 1 |
 | `zubaan extend` | Add target-language merges, resize and initialize embeddings | 2 |
 | `zubaan export` | GGUF (with tokenizer parity check), vLLM config, Ollama Modelfile | 2 |
 | `zubaan adapt` | Continued pretraining so the model learns new tokens (Kaggle) | 3 |
@@ -30,7 +31,8 @@ Goal of the project for its author: a public, credible demonstration of skill in
 
 ```bash
 uv sync --group dev                 # core + dev tools
-uv sync --group dev --extra audit   # add transformers/tokenizers/datasets for real audits
+uv sync --group dev --extra audit   # add transformers/tokenizers/datasets/torch for real audits
+uv sync --group dev --extra audit --extra report   # plus matplotlib for zubaan report tax
 uv run pytest                       # fast tests (slow and gpu markers skipped by default)
 uv run pytest -m slow               # tests that download models or data
 uv run ruff check . && uv run ruff format .
@@ -54,7 +56,8 @@ src/zubaan/
   adapt/        stage 3: cpt.py (planned)
   draft/        stage 4: distill.py, ngram.py (planned)
   bench/        stage 5: runner.py, quality.py (planned)
-  report/       charts and Markdown/HTML reports (planned)
+  report/       charts.py, tax.py: Markdown report with PNG charts
+  data/         flores.py: FLORES download
 tests/          pytest; fixtures/ holds tiny text samples
 configs/        example YAML run configs
 notebooks/      Kaggle notebooks for GPU steps; they pip install this package and call it

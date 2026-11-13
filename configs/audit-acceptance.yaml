@@ -1,0 +1,21 @@
+# Speculative decoding acceptance of Qwen3-0.6B (draft) for Qwen3-1.7B (target).
+# Local, 8 GB RAM, CPU: start with --max-texts 5, close other apps, and use
+# --mode sequential if memory is short. The full 1,012 sentences run on Kaggle with
+# notebooks/01_audit_acceptance_qwen3.ipynb (dtype float32, device cuda).
+#   uv run zubaan audit acceptance --config configs/audit-acceptance.yaml
+
+acceptance:
+  draft: Qwen/Qwen3-0.6B
+  target: Qwen/Qwen3-1.7B
+  corpus: data/flores_urd.txt
+  reference_corpus: data/flores_eng.txt
+  target_lang: urd
+  reference_lang: eng
+  normalize: true
+  max_texts: 50
+  dtype: bfloat16
+  device: cpu
+  mode: joint
+  chunk_size: 16
+  # draft_cost: leave unset to use draft parameters / target parameters
+  output: reports/acceptance_qwen3.json

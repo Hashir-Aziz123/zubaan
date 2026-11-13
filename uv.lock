@@ -5005,6 +5005,8 @@ audit = [
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
     { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "tokenizers" },
+    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "torch", version = "2.15.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "transformers", version = "5.20.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "transformers", version = "5.22.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
@@ -5017,6 +5019,10 @@ bench = [
 docs = [
     { name = "mkdocs-material", version = "9.7.7", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "mkdocs-material", version = "9.8.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+]
+report = [
+    { name = "matplotlib", version = "3.10.9", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "matplotlib", version = "3.11.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
 train = [
     { name = "accelerate" },
@@ -5046,6 +5052,7 @@ requires-dist = [
     { name = "datasets", marker = "extra == 'audit'", specifier = ">=3.0" },
     { name = "httpx", marker = "extra == 'bench'", specifier = ">=0.27" },
     { name = "matplotlib", marker = "extra == 'bench'", specifier = ">=3.8" },
+    { name = "matplotlib", marker = "extra == 'report'", specifier = ">=3.8" },
     { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.5" },
     { name = "numpy", marker = "extra == 'audit'", specifier = ">=1.26" },
     { name = "openai", marker = "extra == 'bench'", specifier = ">=1.40" },
@@ -5054,14 +5061,15 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6" },
     { name = "rich", specifier = ">=13" },
     { name = "tokenizers", marker = "extra == 'audit'", specifier = ">=0.20" },
+    { name = "torch", marker = "extra == 'audit'", specifier = ">=2.3" },
     { name = "torch", marker = "extra == 'train'", specifier = ">=2.3" },
     { name = "transformers", marker = "extra == 'audit'", specifier = ">=4.45" },
     { name = "trl", marker = "extra == 'train'", specifier = ">=0.12" },
     { name = "typer", specifier = ">=0.12" },
     { name = "zubaan", extras = ["audit"], marker = "extra == 'train'" },
-    { name = "zubaan", extras = ["train", "bench", "docs"], marker = "extra == 'all'" },
+    { name = "zubaan", extras = ["train", "bench", "report", "docs"], marker = "extra == 'all'" },
 ]
-provides-extras = ["audit", "train", "bench", "docs", "all"]
+provides-extras = ["audit", "train", "bench", "report", "docs", "all"]
 
 [package.metadata.requires-dev]
 dev = [
