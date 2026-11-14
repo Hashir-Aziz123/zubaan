@@ -10,6 +10,7 @@ an Urdu drafter) try to improve.
 
 - Across 6 tokenizers, the same 1,012 sentences cost between **1.35x** (`bigscience/bloom-560m`) and **4.29x** (`mistralai/Mistral-7B-Instruct-v0.3`) as many tokens in Urdu as in English.
 - `Qwen/Qwen3-1.7B`, the model zubaan extends, needs **3.12 tokens per Urdu word** against 1.24 for English. The same text costs **3.14x** as many tokens and fills the context window that much faster, and at equal tokens per second Urdu output arrives **2.5x** slower in words per second.
+- Speculative decoding: the draft's guesses are accepted at alpha = **0.573** in Urdu and **0.632** in English.
 
 ## What was measured
 
@@ -55,7 +56,38 @@ Not measured (access not granted at the time of the run; they will be added when
 
 ## 2. Speculative decoding acceptance
 
-Not run yet.
+Draft `Qwen/Qwen3-0.6B`, target `Qwen/Qwen3-1.7B`, same vocabulary (checked). Both models read
+the same real sentence; at every position the acceptance rate is the overlap of their
+next-token distributions. Models ran in float32 on cuda (joint mode);
+x86_64.
+
+| Language | Texts | Positions | alpha | 95% interval | Greedy match | Tokens per pass (gamma=4) | Modelled speedup |
+| --- | ---: | ---: | ---: | --- | ---: | ---: | ---: |
+| Urdu | 1012 | 85,610 | **0.573** | [0.570, 0.575] | 0.520 | 2.20 | 0.92x |
+| English | 1012 | 26,609 | **0.632** | [0.628, 0.636] | 0.616 | 2.44 | 1.02x |
+
+Urdu drafts are accepted less often than English ones (0.573 vs 0.632), and the 95% intervals do not overlap.
+
+![Acceptance rate, Urdu vs English](acceptance.png)
+
+The speedup is **modelled, not measured**: it uses draft cost c = 0.35
+(parameter ratio) and assumes each drafted token is accepted independently.
+Real speed is measured against running servers in stage 5.
+
+### Both taxes together: words per target step
+
+Speculative decoding is judged per target forward pass, but readers receive words. Dividing
+expected tokens per pass by tokens per word gives a number that is fair across languages:
+
+words per target step = E / tokens per word, where E = (1 - alpha^(gamma+1)) / (1 - alpha)
+
+| Language | alpha | E (gamma=4) | Tokens per word | Words per target step |
+| --- | ---: | ---: | ---: | ---: |
+| Urdu | 0.573 | 2.20 | 3.12 | **0.70** |
+| English | 0.632 | 2.44 | 1.24 | **1.97** |
+
+Each expensive step of the target model delivers 2.8 times as many English words as
+Urdu words.
 
 ## Limitations
 
