@@ -58,7 +58,8 @@ def next_token_probs(model, ids: Sequence[int], device: str = "cpu"):
 def _compare(pt, pd) -> tuple[list[float], list[bool]]:
     if pt.shape != pd.shape:
         raise ValueError(f"target and draft outputs differ in shape: {pt.shape} vs {pd.shape}")
-    alphas = overlap_batched(pt, pd.float()).tolist()
+    # sum(min(p, q)) <= 1 mathematically; float32 rounding can overshoot to 1.0000001.
+    alphas = overlap_batched(pt, pd.float()).clamp(max=1.0).tolist()
     greedy = (pt.argmax(dim=-1) == pd.argmax(dim=-1)).tolist()
     return alphas, greedy
 

@@ -46,3 +46,10 @@ def test_tiny_model_against_itself(mode):
     # float16 caching in sequential mode costs a little precision.
     assert all(x == pytest.approx(1.0, abs=2e-3) for a in alphas for x in a)
     assert info["draft_params"] == info["target_params"]
+
+
+def test_compare_never_exceeds_one():
+    # Rows that sum to slightly more than 1 (float rounding) must not give alpha > 1.
+    p = torch.full((2, 4), 0.25000003)
+    alphas, _ = _compare(p, p.clone())
+    assert max(alphas) <= 1.0
