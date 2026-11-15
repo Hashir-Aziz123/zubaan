@@ -53,6 +53,10 @@ def compute_fertility(
         n_words += len(split_words(text))
         n_chars += len(text)
         n_tokens += len(tokenizer.encode(text, add_special_tokens=False))
+    if n_texts == 0:
+        raise ValueError("no texts to measure")
+    if n_words == 0:
+        raise ValueError("texts contain no words; check the corpus file and its encoding")
     return FertilityResult(n_texts, n_words, n_chars, n_tokens)
 
 
