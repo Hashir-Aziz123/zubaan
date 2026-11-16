@@ -15,8 +15,10 @@ Each stage ends with something usable and public. Estimates assume part-time wor
 
 ## Stage 2: extend and export (2 to 3 weeks)
 
-- [ ] Train Urdu BPE with the base pre-tokenizer; select new merges
-- [ ] Merge into base tokenizer as real merges; English-unchanged and Urdu round-trip tests
+- [x] Urdu training corpus: Urdu Wikipedia, cleaned, FLORES-overlap removed, held-out split (`zubaan data urdu`)
+- [x] Learn Urdu merges on top of the base tokenization; select merges that cannot touch English (`zubaan extend learn`)
+- [x] Merge into base tokenizer as real merges; English-unchanged and Urdu round-trip tests pass on Qwen3 (special token ids pinned)
+- [x] Token cost sweep (`zubaan extend sweep`), tokenizer only, no quality yet. Qwen3-1.7B Urdu cost multiplier 3.14x -> 1.40x (5k new tokens), 1.29x (10k), 1.22x (20k), 1.20x (32k), English unchanged
 - [ ] Resize embeddings and LM head; mean-of-pieces initialization (compare with langsfer FOCUS)
 - [ ] GGUF export with pre-tokenizer fingerprint handling and HF vs llama.cpp parity test
 - [ ] Ollama Modelfile and vLLM config generation

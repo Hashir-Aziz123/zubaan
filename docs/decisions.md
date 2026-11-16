@@ -49,3 +49,18 @@ The first report used gamma = 4 drafted tokens for every language. With a draft 
 ## 2026-11-13: Reports live in docs/
 
 `reports/` is gitignored scratch output. `zubaan report tax` writes the published report and its PNG charts to `docs/reports/urdu-language-tax/`, which is committed and shown on the MkDocs site. Every number in it is read from the saved JSON results, never typed by hand. Charts use a validated categorical palette with Urdu always in slot 1 (blue) and English in slot 2 (orange), bars starting at zero, and direct value labels. matplotlib lives in a new `report` extra.
+
+## 2026-11-16: Stage 2 tokenizer extension design
+
+**Corpus.** Urdu Wikipedia (`wikimedia/wikipedia`, `20231101.ur`, CC BY-SA 3.0 and GFDL), cleaned with `normalize_urdu`, lines under 5 words or under 70% Arabic-block characters dropped, exact duplicates dropped, and any line that shares 8 consecutive words with a FLORES devtest sentence dropped (16 lines in the full file, 2 within the 100 MB cap). 1% of lines go to a held-out file by a hash of the line. Training text is capped at 100 MB. CC-100 is only added if the cost-versus-size curve is still dropping, which it is not (see below).
+
+**Merges are learned on top of the base tokenization ("continued BPE").** A merge appended to the base merge list only sees text the base has already split as far as it can. Merges learned from raw bytes can name pairs that never occur, so they would never fire. Instead every word is first split by the base BPE, then the most frequent adjacent pair of those pieces is merged, repeatedly. Each merge is therefore applied exactly as learned, and a test replays the merges by hand and checks the tokenizer gives the same pieces. The Hugging Face `BpeTrainer` is not used. One long run serves every vocabulary size, because the first k merges of a run equal a run asked for k (tested).
+
+**English is unchanged by construction, not by luck.** A new merge is only allowed if the merged token contains a UTF-8 lead byte 0xD8 to 0xDB. Those four bytes occur only in characters U+0600 to U+06FF (checked for every Unicode code point in a test), so a new token can only appear in text that has an Arabic-block character. Any text without one tokenizes exactly as before. Tests cover FLORES English, 4,500 random strings over Latin, Cyrillic, Hebrew, Devanagari, CJK and emoji, and a mutation check that sneaks in an English merge and confirms the test fails. The rule is stricter than needed (Arabic Supplement, presentation forms and ZWNJ-only merges are not allowed) and can be relaxed later.
+
+**Special token ids must be pinned in `model.vocab`.** The `tokenizers` library ignores the stored id of an added token that is not in `model.vocab` and assigns it `len(vocab) + position`. Appending 100 merges to Qwen3 moved `<|im_end|>` from 151645 to 151745 with a naive append. The extended `tokenizer.json` therefore also lists the 26 added token strings in `model.vocab` at their original ids. New Urdu ids start at 151669, the first id used by neither the vocabulary nor an added token, not at the padded embedding size 151,936.
+
+**Training text is normalized, evaluation is reported both ways.** Merges are learned from normalized text, matching the audit. The sweep reports cost on normalized FLORES Urdu and on raw FLORES Urdu, and the two agree within 0.02x, so skipping normalization at inference costs almost nothing.
+
+**Vocabulary sizes.** Sweep of 5k, 10k, 20k and 32k new tokens. See the Stage 2 results in the roadmap. Choice for Stage 3 is a separate decision, recorded when made.
+

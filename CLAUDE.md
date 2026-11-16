@@ -51,13 +51,14 @@ src/zubaan/
   io.py         file helpers
   text/         Urdu normalization and word splitting
   audit/        stage 1: fertility.py, acceptance.py
-  extend/       stage 2: train_bpe.py, merge.py, init_emb.py (planned)
+  extend/       stage 2: tokenizer_info.py, train_bpe.py, selection.py, merge.py, sweep.py
+                (done); init_emb.py (planned)
   export/       stage 2+: gguf.py, vllm.py, ollama.py (planned)
   adapt/        stage 3: cpt.py (planned)
   draft/        stage 4: distill.py, ngram.py (planned)
   bench/        stage 5: runner.py, quality.py (planned)
   report/       charts.py, tax.py: Markdown report with PNG charts
-  data/         flores.py: FLORES download
+  data/         flores.py: FLORES download; urdu.py: Urdu Wikipedia training corpus
 tests/          pytest; fixtures/ holds tiny text samples
 configs/        example YAML run configs
 notebooks/      Kaggle notebooks for GPU steps; they pip install this package and call it

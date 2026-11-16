@@ -26,6 +26,8 @@ data_app = typer.Typer(help="Download evaluation data.", no_args_is_help=True)
 app.add_typer(data_app, name="data")
 report_app = typer.Typer(help="Build reports from saved results.", no_args_is_help=True)
 app.add_typer(report_app, name="report")
+extend_app = typer.Typer(help="Stage 2: extend a tokenizer with Urdu merges.", no_args_is_help=True)
+app.add_typer(extend_app, name="extend")
 
 console = Console()
 
@@ -394,10 +396,168 @@ def audit_acceptance(
     console.print(f"Saved {cfg.output}")
 
 
-@app.command()
-def extend() -> None:
-    """Add target-language merges to a tokenizer and initialize the new embeddings."""
-    _planned(2, "tokenizer extension")
+@data_app.command("urdu")
+def data_urdu(
+    config: Annotated[
+        Optional[Path],  # noqa: UP045
+        typer.Option("--config", exists=True, help="YAML config with a urdu_corpus section"),
+    ] = None,
+    out: Annotated[
+        Optional[Path],  # noqa: UP045
+        typer.Option(help="Output directory (default data/urdu)"),
+    ] = None,
+    max_mb: Annotated[
+        Optional[float],  # noqa: UP045
+        typer.Option(help="Stop after this many MB of training text"),
+    ] = None,
+    parquet: Annotated[
+        Optional[Path],  # noqa: UP045
+        typer.Option(help="Use this Wikipedia parquet file instead of downloading one"),
+    ] = None,
+) -> None:
+    """Build the Urdu training text for tokenizer extension from Urdu Wikipedia.
+
+    Cleans and normalizes lines, removes anything that overlaps the FLORES sentences, and
+    writes urdu_train.txt, urdu_heldout.txt and urdu_meta.json.
+    """
+    from zubaan.config import UrduCorpusConfig
+    from zubaan.data.urdu import (
+        WIKIPEDIA_FILE,
+        WIKIPEDIA_LICENSE,
+        WIKIPEDIA_REPO,
+        build_corpus,
+        download_wikipedia,
+        iter_parquet_text,
+    )
+
+    cfg = (_section(config, "urdu_corpus") if config else None) or UrduCorpusConfig()
+    out_dir = out or cfg.out_dir
+    max_mb = max_mb if max_mb is not None else cfg.max_mb
+    if not cfg.flores.exists():
+        raise typer.BadParameter(f"{cfg.flores} not found; run 'zubaan data flores' first")
+    path = parquet or download_wikipedia(cfg.raw_dir / "wikipedia_ur")
+    meta = build_corpus(
+        iter_parquet_text(path),
+        out_dir,
+        read_lines(cfg.flores),
+        max_mb=max_mb,
+        heldout_percent=cfg.heldout_percent,
+        min_words=cfg.min_words,
+        min_urdu_fraction=cfg.min_urdu_fraction,
+        source={
+            "name": WIKIPEDIA_REPO,
+            "file": WIKIPEDIA_FILE,
+            "license": WIKIPEDIA_LICENSE,
+            "local_file": str(path),
+        },
+    )
+    st = meta["stats"]
+    console.print(
+        f"Train: {st['train_lines']:,} lines, {st['train_bytes'] / 1e6:.1f} MB. "
+        f"Held-out: {st['heldout_lines']:,} lines. "
+        f"Dropped: {st['dropped_filter']:,} filtered, {st['dropped_duplicate']:,} duplicate, "
+        f"{st['dropped_flores']:,} overlapping FLORES."
+    )
+    console.print(f"Saved {out_dir}")
+
+
+def _extend_config(config: Path, base_model: str | None):
+    cfg = _section(config, "extend")
+    if base_model:
+        cfg = cfg.model_copy(update={"base_model": base_model})
+    return cfg
+
+
+@extend_app.command("learn")
+def extend_learn(
+    config: Annotated[Path, typer.Option("--config", exists=True, help="YAML with extend:")],
+    base_model: Annotated[
+        Optional[str],  # noqa: UP045
+        typer.Option(help="Override extend.base_model (HF repo id or local folder)"),
+    ] = None,
+) -> None:
+    """Learn Urdu merges and write the extended tokenizer (no model weights are touched)."""
+    from zubaan.extend.merge import assert_only_model_changed, extend_tokenizer_json, save_extended
+    from zubaan.extend.sweep import learn_urdu_merges, save_merges
+    from zubaan.extend.tokenizer_info import (
+        find_local_files,
+        inspect_tokenizer_json,
+        load_tokenizer_json,
+    )
+
+    cfg = _extend_config(config, base_model)
+    base = load_tokenizer_json(cfg.base_model)
+    n_max = max([cfg.n_new_tokens, *cfg.sizes])
+    lines = read_lines(cfg.corpus, cfg.max_lines)
+    console.print(f"Learning up to {n_max:,} merges from {len(lines):,} lines...")
+    merges = learn_urdu_merges(lines, base, n_max, cfg.min_count)
+    save_merges(merges, cfg.merges_file)
+    console.print(f"Learned {len(merges):,} merges, saved {cfg.merges_file}")
+    chosen = merges[: cfg.n_new_tokens]
+    ext = extend_tokenizer_json(base, chosen)
+    assert_only_model_changed(base, ext)
+    out = save_extended(ext, find_local_files(cfg.base_model), cfg.output_dir / "tokenizer")
+    info = inspect_tokenizer_json(ext)
+    console.print(
+        f"Extended tokenizer: {len(chosen):,} new tokens, vocabulary {info.total_vocab_size:,}, "
+        f"saved to {out}"
+    )
+
+
+@extend_app.command("sweep")
+def extend_sweep(
+    config: Annotated[Path, typer.Option("--config", exists=True, help="YAML with extend:")],
+    base_model: Annotated[
+        Optional[str],  # noqa: UP045
+        typer.Option(help="Override extend.base_model (HF repo id or local folder)"),
+    ] = None,
+    out: Annotated[Path, typer.Option(help="Save the JSON result here")] = Path(
+        "reports/extend_sweep.json"
+    ),
+) -> None:
+    """Measure token cost for each vocabulary size in extend.sizes, with English as control."""
+    from zubaan.extend.sweep import load_merges, sweep_vocab_sizes
+    from zubaan.extend.tokenizer_info import load_tokenizer_json
+
+    cfg = _extend_config(config, base_model)
+    if not cfg.merges_file.exists():
+        raise typer.BadParameter(f"{cfg.merges_file} not found; run 'zubaan extend learn' first")
+    base = load_tokenizer_json(cfg.base_model)
+    merges = load_merges(cfg.merges_file)
+    heldout = read_lines(cfg.heldout) if cfg.heldout else []
+    rows = sweep_vocab_sizes(
+        base, merges, cfg.sizes, read_lines(cfg.eval_urdu), read_lines(cfg.eval_english), heldout
+    )
+    result = {"base_model": cfg.base_model, "n_merges_learned": len(merges), "rows": rows}
+    result["provenance"] = run_metadata([cfg.base_model], cfg.corpus.parent / "urdu_meta.json")
+    write_json(result, out)
+
+    table = Table(title=f"Urdu token cost by number of new tokens ({cfg.base_model})")
+    for col in (
+        "New tokens",
+        "Vocab",
+        "Urdu tok/word",
+        "Cost x",
+        "Raw cost x",
+        "Held-out tok/word",
+        "English changed",
+        "Round-trip fails",
+    ):
+        table.add_column(col, justify="right")
+    for r in rows:
+        table.add_row(
+            f"{r['n_new_tokens']:,}",
+            f"{r['vocab_size']:,}",
+            f"{r['urdu_tokens_per_word']:.2f}",
+            f"{r['cost_multiplier']:.2f}x",
+            f"{r['raw_cost_multiplier']:.2f}x",
+            f"{r.get('heldout_tokens_per_word', float('nan')):.2f}",
+            str(r["english_different"]),
+            str(r["urdu_roundtrip_failures"]),
+        )
+    console.print(table)
+    console.print("Quality is not measured here: new embeddings are untrained (see stage 3).")
+    console.print(f"Saved {out}")
 
 
 @app.command()

@@ -46,10 +46,36 @@ class AcceptanceConfig(BaseModel):
     output: Path = Path("reports/acceptance.json")
 
 
+class UrduCorpusConfig(BaseModel):
+    """Build the Urdu training text for tokenizer extension (zubaan data urdu)."""
+
+    raw_dir: Path = Field(default=Path("data/raw"), description="Where the source is downloaded")
+    out_dir: Path = Path("data/urdu")
+    flores: Path = Field(
+        default=Path("data/flores_urd.txt"),
+        description="Evaluation sentences that must not appear in the training text",
+    )
+    max_mb: float | None = Field(
+        default=100.0, description="Stop after this many MB of training text (None = all)"
+    )
+    heldout_percent: float = 1.0
+    min_words: int = 5
+    min_urdu_fraction: float = 0.7
+
+
 class ExtendConfig(BaseModel):
     base_model: str
     corpus: Path
+    heldout: Path | None = Field(default=None, description="Held-out Urdu lines for measuring")
+    eval_urdu: Path = Path("data/flores_urd.txt")
+    eval_english: Path = Path("data/flores_eng.txt")
     n_new_tokens: int = 10_000
+    sizes: list[int] = Field(
+        default=[5_000, 10_000, 20_000, 32_000], description="Vocabulary sizes to compare"
+    )
+    max_lines: int | None = Field(default=None, description="Use only the first N training lines")
+    min_count: int = Field(default=2, description="A merge must save at least this many tokens")
+    merges_file: Path = Path("outputs/extend/merges.json")
     init_method: str = Field(default="mean", description="mean | focus | random")
     output_dir: Path = Path("outputs/extended")
 
@@ -70,6 +96,7 @@ class ProjectConfig(BaseModel):
     audit: AuditConfig | None = None
     compare: CompareConfig | None = None
     acceptance: AcceptanceConfig | None = None
+    urdu_corpus: UrduCorpusConfig | None = None
     extend: ExtendConfig | None = None
     adapt: AdaptConfig | None = None
 

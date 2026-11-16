@@ -1,0 +1,25 @@
+# Stage 2 chunks 1 to 5: Urdu corpus, merge learning, vocabulary size sweep. Run with:
+#   uv run zubaan data flores
+#   uv run zubaan data urdu --config configs/extend-qwen3.yaml
+#   uv run zubaan extend learn --config configs/extend-qwen3.yaml
+#   uv run zubaan extend sweep --config configs/extend-qwen3.yaml
+# Only tokenizer files are downloaded for the extension steps, never model weights.
+
+urdu_corpus:
+  raw_dir: data/raw
+  out_dir: data/urdu
+  flores: data/flores_urd.txt   # evaluation sentences; overlapping training lines are dropped
+  max_mb: 100
+  heldout_percent: 1.0
+
+extend:
+  base_model: Qwen/Qwen3-1.7B
+  corpus: data/urdu/urdu_train.txt
+  heldout: data/urdu/urdu_heldout.txt
+  eval_urdu: data/flores_urd.txt
+  eval_english: data/flores_eng.txt
+  n_new_tokens: 10000
+  sizes: [5000, 10000, 20000, 32000]
+  min_count: 2
+  merges_file: outputs/extend/merges.json
+  output_dir: outputs/extend

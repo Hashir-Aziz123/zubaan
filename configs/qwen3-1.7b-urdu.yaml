@@ -8,7 +8,7 @@ audit:
 
 extend:
   base_model: Qwen/Qwen3-1.7B
-  corpus: data/urdu_train.txt
+  corpus: data/urdu/urdu_train.txt
   n_new_tokens: 10000
   init_method: mean
   output_dir: outputs/qwen3-1.7b-urdu-extended

@@ -1,6 +1,6 @@
 # Stage 2 plan: extend and export
 
-Draft, 2026-11-16. Based on `continue.md`, `docs/roadmap.md` and `CLAUDE.md`. Nothing here is built yet.
+Draft, 2026-11-16. Chunks 0 to 5 are built (see "Status" at the end). Based on `continue.md`, `docs/roadmap.md` and `CLAUDE.md`. Nothing here is built yet.
 
 **Goal.** Take a base model (Qwen3-1.7B) and an Urdu text file, and produce an extended model whose tokenizer costs far fewer tokens on Urdu, plus the GGUF, Ollama and vLLM files to run it.
 
@@ -142,3 +142,14 @@ Chunks 0 to 5 need no model weights and can all be finished on the laptop, and t
 - **GGUF fingerprint.** The converter may also want the new tokens' types and scores; the parity test is the real proof, not the absence of warnings.
 - **Quality drop mistaken for a bug.** It is expected before Stage 3; chunk 8 records it so nobody has to guess.
 - **Time.** Chunks 0 to 5 are about a week part-time; 6 to 10 are the bulk. If time runs short, cut chunk 7 (FOCUS) first, since mean-of-pieces is the required method.
+
+## Status (2026-11-16): chunks 0 to 5 built
+
+Differences from the plan above, all recorded in `docs/decisions.md`:
+
+- **Chunk 2** uses continued BPE (merges learned on top of the base tokenization) instead of the Hugging Face `BpeTrainer`, because merges learned from raw bytes can name pairs that never occur after base tokenization. Merge counts are pair occurrences, not frequencies from a trainer.
+- **Chunk 3** is a proof, not a heuristic: a merge is allowed only if its token contains a UTF-8 lead byte 0xD8 to 0xDB, which occurs only for characters U+0600 to U+06FF. The learner applies the filter while learning, so no later merge depends on a dropped one.
+- **Chunk 4** found that the `tokenizers` library moves special tokens that are only in `added_tokens` when the vocabulary grows (a naive append moved `<|im_end|>` from 151645 to 151745). The extended `tokenizer.json` lists them in `model.vocab` at their original ids. Chunk 6 should still resize the embedding matrix to `151669 + N`.
+- **Chunk 5** vocabulary sizes are 5k, 10k, 20k and 32k (your choice). Results are in the roadmap. Stage 1's `audit fertility` run on the saved extended tokenizer gives the same 1.29x as the sweep for 10k, with English tokens identical to the base (27,621).
+- The corpus is capped at 100 MB (295,905 lines); the full file had 785,348 training lines.
+
