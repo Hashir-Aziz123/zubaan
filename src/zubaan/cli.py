@@ -344,6 +344,7 @@ def audit_acceptance(
         raise typer.BadParameter("give --draft, --target and --corpus, or a --config")
     cfg = AcceptanceConfig.model_validate(values)
 
+    from zubaan.audit.acceptance import best_speedup
     from zubaan.audit.acceptance_lm import acceptance_report
 
     texts = {cfg.target_lang: read_lines(cfg.corpus, cfg.max_texts)}
@@ -373,10 +374,10 @@ def audit_acceptance(
 
     table = Table(title=f"Acceptance: draft {cfg.draft}, target {cfg.target}")
     table.add_column("Language")
-    for col in ("Texts", "Positions", "alpha", "95% CI", "Greedy match", "Speedup g=4"):
+    for col in ("Texts", "Positions", "alpha", "95% CI", "Greedy match", "Best gamma", "Speedup"):
         table.add_column(col, justify="right")
     for lang, r in result["languages"].items():
-        g4 = next(s for s in r["speedup"] if s["gamma"] == 4)
+        best = best_speedup(r["speedup"])
         table.add_row(
             lang,
             str(r["n_texts"]),
@@ -384,11 +385,12 @@ def audit_acceptance(
             f"{r['alpha']:.3f}",
             f"[{r['alpha_ci_low']:.3f}, {r['alpha_ci_high']:.3f}]",
             f"{r['greedy_match']:.3f}",
-            f"{g4['speedup']:.2f}x",
+            str(best["gamma"]),
+            f"{best['speedup']:.2f}x",
         )
     console.print(table)
     cost = next(iter(result["languages"].values()))["draft_cost"]
-    console.print(f"Modelled speedup with draft cost c = {cost:.2f}; not measured (see stage 5).")
+    console.print(f"Best of 1 to 6 drafted tokens, c = {cost:.2f}; modelled, not measured.")
     console.print(f"Saved {cfg.output}")
 
 

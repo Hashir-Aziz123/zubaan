@@ -5,6 +5,7 @@ theme:
 nav:
   - Home: index.md
   - Roadmap: roadmap.md
+  - Stage 1 usage: stage1-usage.md
   - Decisions: decisions.md
   - Reports:
       - The Urdu language tax: reports/urdu-language-tax/index.md

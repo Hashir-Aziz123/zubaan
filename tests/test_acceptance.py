@@ -3,6 +3,7 @@ import pytest
 from zubaan.audit.acceptance import (
     acceptance_rate,
     argmax,
+    best_speedup,
     bootstrap_ci,
     expected_tokens_per_pass,
     measure_acceptance,
@@ -92,6 +93,19 @@ def test_summarize_acceptance():
     assert s.n_positions == 4
     assert s.alpha == pytest.approx(0.725)
     assert s.greedy_match == pytest.approx(0.75)
+
+
+def test_best_speedup_sweeps_one_to_six():
+    # Urdu: alpha 0.573, c 0.35. gamma 1 gives 1.573 / 1.35 = 1.165x; gamma 4 gives 0.92x.
+    table = speedup_table(0.573, 0.35, gammas=range(1, 9))
+    best = best_speedup(table)
+    assert best["gamma"] == 1
+    assert best["speedup"] == pytest.approx(1.165, abs=1e-3)
+    # gammas above 6 are ignored even if they were saved.
+    assert max(r["gamma"] for r in table) == 8
+    assert best_speedup([{"gamma": 8, "speedup": 9.0}, {"gamma": 2, "speedup": 1.1}])["gamma"] == 2
+    with pytest.raises(ValueError):
+        best_speedup([{"gamma": 8, "speedup": 9.0}])
 
 
 def test_speedup_table_matches_formula():

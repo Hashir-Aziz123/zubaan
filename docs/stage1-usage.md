@@ -78,7 +78,7 @@ uv run zubaan audit acceptance -d Qwen/Qwen3-0.6B -t Qwen/Qwen3-1.7B \
 
 **Function:** speculative decoding uses a small draft model to guess tokens that the big model then verifies. This command feeds both models the same sentence and measures **alpha**, the probability that the draft's guess is accepted, for Urdu and English. It then models the speedup from alpha.
 
-**Result on Qwen3-0.6B drafting for 1.7B:** alpha 0.573 in Urdu against 0.632 in English. Modelled speedup at 4 drafted tokens is 0.92x for Urdu (slower than not drafting) and 1.02x for English.
+**Result on Qwen3-0.6B drafting for 1.7B:** alpha 0.573 in Urdu against 0.632 in English. The command sweeps 1 to 6 drafted tokens and reports the best modelled speedup for each language, because a fixed 4 understates what is achievable when the draft costs about 35% of the target. The best is 1 drafted token for both: 1.17x for Urdu and 1.21x for English. At 4 drafted tokens the same numbers fall to 0.92x and 1.02x, so Urdu would be slower than not drafting.
 
 **Requirements:**
 - **Downloads both full models.** Roughly 1.2 GB for the 0.6B and 3.4 GB for the 1.7B in bfloat16.

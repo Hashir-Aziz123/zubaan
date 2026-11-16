@@ -61,17 +61,21 @@ the same real sentence; at every position the acceptance rate is the overlap of 
 next-token distributions. Models ran in float32 on cuda (joint mode);
 x86_64.
 
-| Language | Texts | Positions | alpha | 95% interval | Greedy match | Tokens per pass (gamma=4) | Modelled speedup |
-| --- | ---: | ---: | ---: | --- | ---: | ---: | ---: |
-| Urdu | 1012 | 85,610 | **0.573** | [0.570, 0.575] | 0.520 | 2.20 | 0.92x |
-| English | 1012 | 26,609 | **0.632** | [0.628, 0.636] | 0.616 | 2.44 | 1.02x |
+| Language | Texts | Positions | alpha | 95% interval | Greedy match | Best gamma | Tokens per pass | Best modelled speedup |
+| --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: |
+| Urdu | 1012 | 85,610 | **0.573** | [0.570, 0.575] | 0.520 | 1 | 1.57 | 1.17x |
+| English | 1012 | 26,609 | **0.632** | [0.628, 0.636] | 0.616 | 1 | 1.63 | 1.21x |
 
 Urdu drafts are accepted less often than English ones (0.573 vs 0.632), and the 95% intervals do not overlap.
 
 ![Acceptance rate, Urdu vs English](acceptance.png)
 
-The speedup is **modelled, not measured**: it uses draft cost c = 0.35
-(parameter ratio) and assumes each drafted token is accepted independently.
+The speedup is **modelled, not measured**: speedup = E / (1 + gamma x c), where gamma is the
+number of drafted tokens and E = (1 - alpha^(gamma+1)) / (1 - alpha). It is evaluated for
+gamma = 1 to 6 and the table reports the best gamma for each language. It uses draft cost
+c = 0.35 (parameter ratio) and assumes each drafted token is accepted
+independently. A low alpha favors short drafts, so one fixed gamma understates the achievable
+speedup for the language with the lower alpha.
 Real speed is measured against running servers in stage 5.
 
 ### Both taxes together: words per target step
@@ -81,12 +85,14 @@ expected tokens per pass by tokens per word gives a number that is fair across l
 
 words per target step = E / tokens per word, where E = (1 - alpha^(gamma+1)) / (1 - alpha)
 
-| Language | alpha | E (gamma=4) | Tokens per word | Words per target step |
-| --- | ---: | ---: | ---: | ---: |
-| Urdu | 0.573 | 2.20 | 3.12 | **0.70** |
-| English | 0.632 | 2.44 | 1.24 | **1.97** |
+Each language uses its own best draft length from the table above.
 
-Each expensive step of the target model delivers 2.8 times as many English words as
+| Language | alpha | Best gamma | E | Tokens per word | Words per target step |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Urdu | 0.573 | 1 | 1.57 | 3.12 | **0.50** |
+| English | 0.632 | 1 | 1.63 | 1.24 | **1.32** |
+
+Each expensive step of the target model delivers 2.6 times as many English words as
 Urdu words.
 
 ## Limitations

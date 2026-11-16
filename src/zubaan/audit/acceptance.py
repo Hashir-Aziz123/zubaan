@@ -168,7 +168,24 @@ def summarize_acceptance(
     )
 
 
-def speedup_table(alpha: float, draft_cost: float, gammas: Iterable[int] = range(1, 9)) -> list:
+MAX_GAMMA = 6
+
+
+def best_speedup(table: Sequence[dict], max_gamma: int = MAX_GAMMA) -> dict:
+    """The row of a speedup table with the highest speedup among draft lengths <= max_gamma.
+
+    Drafting more tokens raises expected tokens per pass but also the draft cost, so the best
+    draft length differs by language: a lower alpha favors fewer drafted tokens.
+    """
+    rows = [r for r in table if r["gamma"] <= max_gamma]
+    if not rows:
+        raise ValueError(f"no speedup rows with gamma <= {max_gamma}")
+    return max(rows, key=lambda r: r["speedup"])
+
+
+def speedup_table(
+    alpha: float, draft_cost: float, gammas: Iterable[int] = range(1, MAX_GAMMA + 1)
+) -> list:
     """Expected tokens per target pass and modelled speedup for each draft length gamma."""
     return [
         {

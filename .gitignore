@@ -29,3 +29,6 @@ site/
 
 # OS
 .DS_Store
+
+# Personal notes, not published
+docs/glossary.md

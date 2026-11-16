@@ -149,7 +149,7 @@ def acceptance_report(
     mode: str = "joint",
     chunk_size: int = 16,
     draft_cost: float | None = None,
-    gammas: Sequence[int] = range(1, 9),
+    gammas: Sequence[int] = range(1, 7),
     on_text: Callable[[str, int, int], None] | None = None,
 ) -> dict:
     """Acceptance per language for one draft/target pair, with modelled speedups.

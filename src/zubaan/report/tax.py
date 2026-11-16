@@ -9,10 +9,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from zubaan.audit.acceptance import expected_tokens_per_pass
+from zubaan.audit.acceptance import best_speedup, expected_tokens_per_pass
 
 LANG_NAMES = {"urd": "Urdu", "eng": "English"}
-HEADLINE_GAMMA = 4
 
 
 def load_json(path: Path | None) -> dict | None:
@@ -88,15 +87,16 @@ def _acceptance_section(acc: dict, rows: list[dict]) -> str:
     cost = any_lang["draft_cost"]
     lines = [
         "| Language | Texts | Positions | alpha | 95% interval | Greedy match "
-        f"| Tokens per pass (gamma={HEADLINE_GAMMA}) | Modelled speedup |",
-        "| --- | ---: | ---: | ---: | --- | ---: | ---: | ---: |",
+        "| Best gamma | Tokens per pass | Best modelled speedup |",
+        "| --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: |",
     ]
+    best = {lang: best_speedup(r["speedup"]) for lang, r in langs.items()}
     for lang, r in langs.items():
-        s = next(x for x in r["speedup"] if x["gamma"] == HEADLINE_GAMMA)
+        s = best[lang]
         lines.append(
             f"| {names[lang]} | {r['n_texts']} | {r['n_positions']:,} | **{r['alpha']:.3f}** "
             f"| [{r['alpha_ci_low']:.3f}, {r['alpha_ci_high']:.3f}] | {r['greedy_match']:.3f} "
-            f"| {s['tokens_per_pass']:.2f} | {s['speedup']:.2f}x |"
+            f"| {s['gamma']} | {s['tokens_per_pass']:.2f} | {s['speedup']:.2f}x |"
         )
     table = "\n".join(lines)
 
@@ -122,11 +122,12 @@ def _acceptance_section(acc: dict, rows: list[dict]) -> str:
     words = ""
     target_row = _row(rows, acc["target"])
     if target_row and {"urd", "eng"} <= langs.keys():
-        wu = words_per_target_pass(
-            langs["urd"]["alpha"], HEADLINE_GAMMA, target_row["target_tokens_per_word"]
-        )
+        gu, ge = best["urd"]["gamma"], best["eng"]["gamma"]
+        eu = expected_tokens_per_pass(langs["urd"]["alpha"], gu)
+        ee = expected_tokens_per_pass(langs["eng"]["alpha"], ge)
+        wu = words_per_target_pass(langs["urd"]["alpha"], gu, target_row["target_tokens_per_word"])
         we = words_per_target_pass(
-            langs["eng"]["alpha"], HEADLINE_GAMMA, target_row["reference_tokens_per_word"]
+            langs["eng"]["alpha"], ge, target_row["reference_tokens_per_word"]
         )
         words = f"""
 ### Both taxes together: words per target step
@@ -136,11 +137,13 @@ expected tokens per pass by tokens per word gives a number that is fair across l
 
 words per target step = E / tokens per word, where E = (1 - alpha^(gamma+1)) / (1 - alpha)
 
-| Language | alpha | E (gamma={HEADLINE_GAMMA}) | Tokens per word | Words per target step |
-| --- | ---: | ---: | ---: | ---: |
-| Urdu | {langs["urd"]["alpha"]:.3f} | {expected_tokens_per_pass(langs["urd"]["alpha"], 4):.2f} \
+Each language uses its own best draft length from the table above.
+
+| Language | alpha | Best gamma | E | Tokens per word | Words per target step |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Urdu | {langs["urd"]["alpha"]:.3f} | {gu} | {eu:.2f} \
 | {target_row["target_tokens_per_word"]:.2f} | **{wu:.2f}** |
-| English | {langs["eng"]["alpha"]:.3f} | {expected_tokens_per_pass(langs["eng"]["alpha"], 4):.2f} \
+| English | {langs["eng"]["alpha"]:.3f} | {ge} | {ee:.2f} \
 | {target_row["reference_tokens_per_word"]:.2f} | **{we:.2f}** |
 
 Each expensive step of the target model delivers {we / wu:.1f} times as many English words as
@@ -161,8 +164,12 @@ next-token distributions. Models ran in {run["dtype"]} on {run["device"]} ({run[
 
 ![Acceptance rate, Urdu vs English](acceptance.png)
 
-The speedup is **modelled, not measured**: it uses draft cost c = {cost:.2f}
-({any_lang["draft_cost_source"]}) and assumes each drafted token is accepted independently.
+The speedup is **modelled, not measured**: speedup = E / (1 + gamma x c), where gamma is the
+number of drafted tokens and E = (1 - alpha^(gamma+1)) / (1 - alpha). It is evaluated for
+gamma = 1 to 6 and the table reports the best gamma for each language. It uses draft cost
+c = {cost:.2f} ({any_lang["draft_cost_source"]}) and assumes each drafted token is accepted
+independently. A low alpha favors short drafts, so one fixed gamma understates the achievable
+speedup for the language with the lower alpha.
 Real speed is measured against running servers in stage 5.
 {words}"""
 
