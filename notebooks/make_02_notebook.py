@@ -48,8 +48,9 @@ extend:
   quality_texts: 1000
   max_chars: 400
   belebele_questions: null
-  batch_size: 8
-  focus_lines: 50000
+  batch_size: 4
+  max_batch_tokens: 2048
+  focus_lines: 30000
   quality_output: /kaggle/working/extend_quality_qwen3-1.7b.json
 '''
 Path("extend.yaml").write_text(config)
@@ -71,6 +72,8 @@ Settings before running:
 - No secret is needed: Qwen3, FLORES-200 (Meta archive), Urdu Wikipedia and Belebele are not gated.
 
 The model runs in **float32** (about 7 GB of the 16 GB GPU): T4 and P100 have no bfloat16, and float32 avoids float16 overflow. The run saves after every variant, so if the session stops, run all cells again and finished variants are skipped. Expected run time: about 2 hours.
+
+**Safest way to run it:** use *Save Version > Save & Run All (Commit)*. That runs the notebook top to bottom in a fresh container without a browser attached, and keeps `/kaggle/working` as the output even if you close the tab. If a run stops, the results file records the peak GPU and RAM of every finished variant (`memory`), and running again skips finished variants.
 """
     ),
     code(
@@ -83,10 +86,24 @@ REPO = "git+https://github.com/Hashir-Aziz123/zubaan.git"
     ),
     code(
         """
+import os
+import shutil
+
+# Quiet progress bars: thousands of redraw lines can overwhelm the notebook front end.
+os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+os.environ["TQDM_DISABLE"] = "1"
+os.environ["TRANSFORMERS_VERBOSITY"] = "error"
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
 import torch
 
 assert torch.cuda.is_available(), "Turn on a GPU accelerator in the notebook settings"
 print(torch.cuda.get_device_name(0))
+print("GPU memory (GB):", round(torch.cuda.get_device_properties(0).total_memory / 1e9, 1))
+with open("/proc/meminfo") as f:
+    mem = {line.split(":")[0]: int(line.split()[1]) for line in f}
+print("RAM (GB): total", round(mem["MemTotal"] / 1e6, 1), "available", round(mem["MemAvailable"] / 1e6, 1))
+print("Disk free in /kaggle/working (GB):", round(shutil.disk_usage("/kaggle/working").free / 1e9, 1))
 """
     ),
     md("## 1. Data: FLORES (evaluation) and the Urdu Wikipedia training text"),

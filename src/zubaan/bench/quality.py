@@ -123,15 +123,42 @@ def token_logprobs(model, seqs: list[list[int]], pad_id: int, device: str = "cpu
     """Log-probability of every token after the first, for each sequence in the batch.
 
     Returns a list of float32 CPU tensors, one per sequence, of length ``len(seq) - 1``.
-    Softmax runs in float32 whatever the model's dtype.
+    The normalizer runs in float32 whatever the model's dtype: log p = logit - logsumexp(logits).
+    This avoids building a second full (batch, length, vocabulary) log-softmax tensor, which
+    for a 150,000-token vocabulary is the largest memory cost of scoring.
     """
     import torch
 
     ids, mask = _pad_batch(seqs, pad_id, device)
     with torch.inference_mode():
-        logits = model(input_ids=ids, attention_mask=mask).logits[:, :-1].float()
-        logp = torch.log_softmax(logits, dim=-1).gather(-1, ids[:, 1:].unsqueeze(-1)).squeeze(-1)
+        logits = model(input_ids=ids, attention_mask=mask).logits[:, :-1]
+        target = logits.gather(-1, ids[:, 1:].unsqueeze(-1)).squeeze(-1).float()
+        logp = target - torch.logsumexp(logits.float(), dim=-1)
+        del logits
     return [logp[i, : len(s) - 1].cpu() for i, s in enumerate(seqs)]
+
+
+def token_budget_batches(
+    lengths: Sequence[int], max_items: int, max_tokens: int
+) -> list[list[int]]:
+    """Group positions of ``lengths`` (already sorted ascending) into batches.
+
+    A batch holds at most ``max_items`` sequences and at most ``max_tokens`` padded tokens
+    (count x longest length), so memory per forward pass stays bounded even when a few texts
+    are long. A single sequence longer than the budget still gets its own batch.
+    """
+    if max_items < 1 or max_tokens < 1:
+        raise ValueError("max_items and max_tokens must be at least 1")
+    batches: list[list[int]] = []
+    current: list[int] = []
+    for i, n in enumerate(lengths):
+        if current and (len(current) + 1 > max_items or (len(current) + 1) * n > max_tokens):
+            batches.append(current)
+            current = []
+        current.append(i)
+    if current:
+        batches.append(current)
+    return batches
 
 
 def text_bits_per_character(
@@ -143,6 +170,7 @@ def text_bits_per_character(
     max_tokens: int = 1024,
     device: str = "cpu",
     on_progress: Callable[[int, int], None] | None = None,
+    max_batch_tokens: int = 2048,
 ) -> dict:
     """Bits per character of ``model`` on ``texts``.
 
@@ -164,13 +192,16 @@ def text_bits_per_character(
     order = sorted(range(len(texts)), key=lambda i: len(encoded[i][1]))
     total_nll = 0.0
     n_tokens = 0
-    for start in range(0, len(order), batch_size):
-        batch = [encoded[i][1] for i in order[start : start + batch_size]]
+    lengths = [len(encoded[i][1]) for i in order]
+    done = 0
+    for group in token_budget_batches(lengths, batch_size, max_batch_tokens):
+        batch = [encoded[order[k]][1] for k in group]
         for lp in token_logprobs(model, batch, context_id, device):
             total_nll -= float(lp.double().sum())
             n_tokens += lp.numel()
+        done += len(group)
         if on_progress is not None:
-            on_progress(min(start + batch_size, len(order)), len(order))
+            on_progress(done, len(order))
     n_chars = sum(c for c, _ in encoded)
     return {
         "n_texts": len(texts),
@@ -191,6 +222,7 @@ def belebele_scores(
     device: str = "cpu",
     max_tokens: int = 2048,
     on_progress: Callable[[int, int], None] | None = None,
+    max_batch_tokens: int = 2048,
 ) -> dict:
     """Score every answer of every Belebele item and return accuracy.
 
@@ -217,7 +249,9 @@ def belebele_scores(
                 raise ValueError(f"an item has {len(seq)} tokens, more than max_tokens")
             seqs.append(seq)
             spans.append(len(cont))
-        lps = token_logprobs(model, seqs, context_id, device)
+        lps = []
+        for group in token_budget_batches([len(x) for x in seqs], 4, max_batch_tokens):
+            lps += token_logprobs(model, [seqs[k] for k in group], context_id, device)
         logprobs.append([float(lp[-k:].double().sum()) for lp, k in zip(lps, spans, strict=True)])
         chars.append([len(c) + 1 for c in choices])  # +1 for the leading space that was scored
         correct.append(belebele_correct(item))

@@ -595,6 +595,7 @@ def extend_quality(
         device=cfg.device,
         meta=meta,
         log=console.print,
+        max_batch_tokens=cfg.max_batch_tokens,
     )
     table = Table(title=f"Quality next to cost: {weights_model} (new rows untrained)")
     cols = ["Variant", "Vocab", "Tok/char Urdu", "BPC Urdu held-out", "BPC Urdu FLORES"]

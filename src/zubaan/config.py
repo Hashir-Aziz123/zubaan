@@ -88,6 +88,9 @@ class ExtendConfig(BaseModel):
     max_chars: int = Field(default=400, description="Skip BPC texts longer than this")
     belebele_questions: int | None = Field(default=100, description="Per language (None = 900)")
     batch_size: int = 2
+    max_batch_tokens: int = Field(
+        default=2048, description="Cap on padded tokens per forward pass (bounds GPU memory)"
+    )
     focus_lines: int = Field(default=30_000, description="Corpus lines used for FOCUS vectors")
     focus_dim: int = 100
     seed: int = 0

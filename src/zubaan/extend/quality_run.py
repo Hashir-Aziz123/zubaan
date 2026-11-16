@@ -124,6 +124,7 @@ def evaluate_variant(
     batch_size: int = 2,
     device: str = "cpu",
     log: Callable[[str], None] = lambda s: None,
+    max_batch_tokens: int = 2048,
 ) -> dict:
     """Bits per character on each text set and Belebele accuracy on each language."""
     tok = load_fast_tokenizer(tokenizer_json)
@@ -132,19 +133,62 @@ def evaluate_variant(
     for name, texts in sets.items():
         t0 = time.perf_counter()
         out["bpc"][name] = text_bits_per_character(
-            model, tok, texts, ctx, batch_size=batch_size, device=device
+            model,
+            tok,
+            texts,
+            ctx,
+            batch_size=batch_size,
+            device=device,
+            max_batch_tokens=max_batch_tokens,
         )
         out["bpc"][name]["seconds"] = round(time.perf_counter() - t0, 1)
         log(f"    bpc {name}: {out['bpc'][name]['bits_per_character']:.4f}")
     for lang, items in belebele.items():
         t0 = time.perf_counter()
-        out["belebele"][lang] = belebele_scores(model, tok, items, ctx, device=device)
+        out["belebele"][lang] = belebele_scores(
+            model, tok, items, ctx, device=device, max_batch_tokens=max_batch_tokens
+        )
         out["belebele"][lang]["seconds"] = round(time.perf_counter() - t0, 1)
         log(
             f"    belebele {lang}: acc {out['belebele'][lang]['acc']:.3f} "
             f"acc_char {out['belebele'][lang]['acc_char']:.3f}"
         )
     return out
+
+
+def memory_report() -> dict:
+    """Peak memory so far: GPU memory allocated by torch and this process's peak RAM, in GB.
+
+    Saved with every variant so that, if a run is killed, the last finished variant shows how
+    close it was to the limit.
+    """
+    out: dict = {}
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            out["peak_gpu_gb"] = round(torch.cuda.max_memory_allocated() / 1e9, 2)
+    except Exception:  # memory logging must never stop a run
+        pass
+    try:
+        import resource
+
+        out["peak_ram_gb"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6, 2)
+    except Exception:  # not available on Windows
+        pass
+    return out
+
+
+def release_gpu_memory() -> None:
+    """Return cached GPU blocks to the driver between variants and reset the peak counter."""
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.reset_peak_memory_stats()
+    except Exception:
+        pass
 
 
 def load_results(path: Path) -> dict:
@@ -177,6 +221,7 @@ def run_quality(
     device: str = "cpu",
     meta: dict | None = None,
     log: Callable[[str], None] = print,
+    max_batch_tokens: int = 2048,
 ) -> dict:
     """Evaluate the base model and every (size, method) variant, saving after each one."""
     results = load_results(output)
@@ -195,7 +240,9 @@ def run_quality(
             model, tokenizer_json, info = build_variant(
                 model_factory, base, merges, n, method, seed, focus_lines, focus_dim
             )
-        row = evaluate_variant(model, tokenizer_json, sets, belebele, batch_size, device, log)
+        row = evaluate_variant(
+            model, tokenizer_json, sets, belebele, batch_size, device, log, max_batch_tokens
+        )
         row.update(
             {
                 "n_new_tokens": n,
@@ -205,10 +252,13 @@ def run_quality(
                 "seconds": round(time.perf_counter() - t0, 1),
             }
         )
+        row["memory"] = memory_report()
+        log(f"    memory: {row['memory']}")
         results["variants"][key] = row
         save_results(results, output)
         del model
         gc.collect()
+        release_gpu_memory()
     return results
 
 

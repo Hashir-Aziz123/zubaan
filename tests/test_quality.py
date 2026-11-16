@@ -292,3 +292,47 @@ def test_real_belebele_loads_with_the_documented_fields():
     assert len(full) == 900
     counts = [sum(belebele_correct(i) == k for i in full) for k in range(4)]
     assert min(counts) > 150  # answers are roughly balanced, so the chance rate is 0.25
+
+
+# memory bounding ---------------------------------------------------------------------------------
+
+
+def test_token_budget_batches_respect_both_limits():
+    from zubaan.bench.quality import token_budget_batches
+
+    lengths = [5, 5, 5, 10, 10, 40, 100]
+    batches = token_budget_batches(lengths, max_items=4, max_tokens=40)
+    assert [i for b in batches for i in b] == list(range(7))  # every item once, in order
+    for b in batches:
+        longest = max(lengths[i] for i in b)
+        assert len(b) <= 4 and (len(b) == 1 or len(b) * longest <= 40)
+    assert [lengths[i] for i in batches[-1]] == [100]  # an over-budget item stands alone
+    assert token_budget_batches([], 4, 40) == []
+    with pytest.raises(ValueError):
+        token_budget_batches([1], 0, 10)
+    with pytest.raises(ValueError):
+        token_budget_batches([1], 1, 0)
+
+
+def test_scores_do_not_depend_on_the_batch_token_budget(tok, english_lines):
+    pytest.importorskip("torch")
+    from conftest import make_tiny_qwen3
+
+    model = make_tiny_qwen3(400, seed=5)
+    texts = english_lines[:8]
+    ref = text_bits_per_character(model, tok, texts, 0, batch_size=8, max_batch_tokens=10_000)
+    tight = text_bits_per_character(model, tok, texts, 0, batch_size=8, max_batch_tokens=1)
+    assert tight["total_nll_nats"] == pytest.approx(ref["total_nll_nats"], rel=1e-4)
+    items = make_items(["the city", "the country", "heavy rain", "new projects"], 2) * 2
+    a = belebele_scores(model, tok, items, 0, max_batch_tokens=10_000)
+    b = belebele_scores(model, tok, items, 0, max_batch_tokens=1)
+    assert (a["acc"], a["acc_char"]) == (b["acc"], b["acc_char"])
+
+
+def test_memory_report_is_json_friendly():
+    import json
+
+    from zubaan.extend.quality_run import memory_report, release_gpu_memory
+
+    json.dumps(memory_report())
+    release_gpu_memory()  # must be a harmless no-op without a GPU
