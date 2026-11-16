@@ -200,3 +200,28 @@ def test_old_token_logits_equal_so_english_only_changes_by_extra_mass(
 def test_resize_info_is_json_serializable(tiny_qwen3):
     info = resize_and_init(tiny_qwen3(48), [[1, 2], [3]], 40, "mean")
     json.dumps(info)
+
+
+def test_run_quality_keeps_finished_variants_when_one_fails(
+    tmp_path, tiny_base_json, merges, tiny_qwen3, urdu_lines, english_lines
+):
+    info = inspect_tokenizer_json(tiny_base_json)
+    n_calls = []
+
+    def factory():
+        n_calls.append(1)
+        if len(n_calls) == 2:  # the second variant fails while loading
+            raise RuntimeError("boom")
+        return tiny_qwen3(info.total_vocab_size + 8, seed=4)
+
+    out = tmp_path / "q.json"
+    kw = dict(
+        sets={"english": english_lines[:4]},
+        belebele={},
+        output=out,
+        log=lambda s: None,
+    )
+    with pytest.raises(RuntimeError, match="n40-mean"):
+        run_quality("tiny", factory, tiny_base_json, merges, [40], ["mean", "random"], **kw)
+    saved = json.loads(out.read_text(encoding="utf-8"))
+    assert set(saved["variants"]) == {"base", "n40-random"}

@@ -21,6 +21,7 @@ from __future__ import annotations
 import gc
 import json
 import time
+import traceback
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
@@ -80,7 +81,9 @@ def build_focus_rows(
     tok = load_fast_tokenizer(ext)
     streams = [tok.encode(line, add_special_tokens=False).ids for line in lines]
     aux = build_aux_embeddings(streams, dim=dim, window=5, min_count=5, seed=seed)
-    weight = model.get_input_embeddings().weight.detach()[:first_new_id]
+    # FOCUS math runs on the CPU in float32 (auxiliary vectors are CPU tensors), whatever
+    # device the model is on.
+    weight = model.get_input_embeddings().weight.detach()[:first_new_id].float().cpu()
     return focus_rows(weight, aux, first_new_id, len(pieces), fallback_pieces=pieces)
 
 
@@ -226,6 +229,7 @@ def run_quality(
     """Evaluate the base model and every (size, method) variant, saving after each one."""
     results = load_results(output)
     results.update({"model": model_name, "meta": meta or {}})
+    failures: dict[str, str] = {}
     plan = [(0, None)] + [(n, m) for n in sorted(set(sizes)) for m in methods]
     for n, method in plan:
         key = variant_key(n, method)
@@ -234,31 +238,40 @@ def run_quality(
             continue
         log(f"{key}: building")
         t0 = time.perf_counter()
-        if n == 0:
-            model, tokenizer_json, info = model_factory(), base, {"method": None, "n_new": 0}
-        else:
-            model, tokenizer_json, info = build_variant(
-                model_factory, base, merges, n, method, seed, focus_lines, focus_dim
+        model = None
+        try:
+            if n == 0:
+                model, tokenizer_json, info = model_factory(), base, {"method": None, "n_new": 0}
+            else:
+                model, tokenizer_json, info = build_variant(
+                    model_factory, base, merges, n, method, seed, focus_lines, focus_dim
+                )
+            row = evaluate_variant(
+                model, tokenizer_json, sets, belebele, batch_size, device, log, max_batch_tokens
             )
-        row = evaluate_variant(
-            model, tokenizer_json, sets, belebele, batch_size, device, log, max_batch_tokens
-        )
-        row.update(
-            {
-                "n_new_tokens": n,
-                "method": method,
-                "init": info,
-                "vocab_size": inspect_tokenizer_json(tokenizer_json).total_vocab_size,
-                "seconds": round(time.perf_counter() - t0, 1),
-            }
-        )
-        row["memory"] = memory_report()
-        log(f"    memory: {row['memory']}")
-        results["variants"][key] = row
-        save_results(results, output)
-        del model
-        gc.collect()
-        release_gpu_memory()
+            row.update(
+                {
+                    "n_new_tokens": n,
+                    "method": method,
+                    "init": info,
+                    "vocab_size": inspect_tokenizer_json(tokenizer_json).total_vocab_size,
+                    "seconds": round(time.perf_counter() - t0, 1),
+                }
+            )
+            row["memory"] = memory_report()
+            log(f"    memory: {row['memory']}")
+            results["variants"][key] = row
+            save_results(results, output)
+        except Exception as exc:  # one bad variant must not throw away the others
+            log(f"    FAILED {key}: {type(exc).__name__}: {exc}")
+            log(traceback.format_exc())
+            failures[key] = f"{type(exc).__name__}: {exc}"
+        finally:
+            del model
+            gc.collect()
+            release_gpu_memory()
+    if failures:
+        raise RuntimeError(f"{len(failures)} variant(s) failed: {failures}")
     return results
 
 
