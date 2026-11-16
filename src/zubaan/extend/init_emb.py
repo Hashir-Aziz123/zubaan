@@ -78,7 +78,8 @@ def random_rows(weight, n: int, seed: int = 0):
 
     w = weight.float()
     gen = torch.Generator().manual_seed(seed)
-    noise = torch.randn((n, w.shape[1]), generator=gen)
+    # Noise is drawn on the CPU so the same seed gives the same rows on any device.
+    noise = torch.randn((n, w.shape[1]), generator=gen).to(w.device)
     return w.mean(dim=0) + noise * w.std(dim=0)
 
 
