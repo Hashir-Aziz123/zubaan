@@ -74,6 +74,21 @@ def inspect_tokenizer_json(data: dict, config: dict | None = None) -> TokenizerI
     )
 
 
+def same_tokenizer(a: dict, b: dict) -> bool:
+    """True if two tokenizer.json files tokenize identically: same vocabulary, merges, added
+    tokens, normalizer, pre-tokenizer and decoder.
+
+    Used to confirm that a model's weights belong to the tokenizer the merges were learned on
+    (Qwen3-0.6B and Qwen3-1.7B share one tokenizer, which is what lets one extension serve both).
+    """
+    keys = ("added_tokens", "normalizer", "pre_tokenizer", "post_processor", "decoder")
+    if any(a.get(k) != b.get(k) for k in keys):
+        return False
+    return (
+        a["model"]["vocab"] == b["model"]["vocab"] and a["model"]["merges"] == b["model"]["merges"]
+    )
+
+
 def find_local_files(name_or_path: str) -> Path:
     """Folder holding ``tokenizer.json``: a local path, or a Hub repo from the local cache.
 

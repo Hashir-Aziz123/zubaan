@@ -106,3 +106,28 @@ def urdu_lines() -> list[str]:
 def english_lines() -> list[str]:
     path = FIXTURES / "english_train_small.txt"
     return path.read_text(encoding="utf-8").splitlines()
+
+
+def make_tiny_qwen3(rows: int, tie: bool = True, seed: int = 0, dtype: str = "float32"):
+    """A random 2-layer Qwen3-style model with ``rows`` embedding rows. No download."""
+    torch = pytest.importorskip("torch")
+    transformers = pytest.importorskip("transformers")
+    cfg = transformers.Qwen3Config(
+        vocab_size=rows,
+        hidden_size=16,
+        intermediate_size=32,
+        num_hidden_layers=2,
+        num_attention_heads=2,
+        num_key_value_heads=1,
+        head_dim=8,
+        max_position_embeddings=256,
+        tie_word_embeddings=tie,
+    )
+    torch.manual_seed(seed)
+    model = transformers.AutoModelForCausalLM.from_config(cfg)
+    return model.to(getattr(torch, dtype)).eval()
+
+
+@pytest.fixture
+def tiny_qwen3():
+    return make_tiny_qwen3

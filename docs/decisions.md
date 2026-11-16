@@ -64,3 +64,23 @@ The first report used gamma = 4 drafted tokens for every language. With a draft 
 
 **Vocabulary sizes.** Sweep of 5k, 10k, 20k and 32k new tokens. See the Stage 2 results in the roadmap. Choice for Stage 3 is a separate decision, recorded when made.
 
+## 2026-11-16: Stage 2 embeddings and quality evaluation design (chunks 6 to 8)
+
+**Sizes and methods.** Evaluate 10,000 and 20,000 new tokens, each initialized three ways: mean of pieces (required), FOCUS-style, and random (control). 10k is the recommended size; 20k is included because it buys a lower cost (1.22x against 1.29x) and quality may or may not justify it.
+
+**Where it runs.** Everything is validated locally on Qwen3-0.6B (fp32 on CPU). The 0.6B model is also the Stage 4 drafter, and it shares Qwen3-1.7B's tokenizer exactly (`same_tokenizer` checks vocabulary, merges, added tokens, normalizer, pre-tokenizer and decoder), so one set of merges serves both. The 1.7B numbers come from `notebooks/02_extend_quality_qwen3.ipynb` on a Kaggle T4, which saves after every variant and resumes if the session stops.
+
+**Resizing.** New rows start at id 151,669, not at the padded matrix size 151,936. Rows below 151,669 are kept bit for bit (tested), and the rows between 151,669 and 151,936 that already existed as padding are overwritten. Qwen3-0.6B and 1.7B tie the input embedding and the output head, so one matrix is resized; the code also handles untied models by initializing the head from the head's own rows. The matrix is sized exactly to the new vocabulary, not rounded up.
+
+**Mean of pieces** uses the base tokens each new token was merged from, found by expanding the merge tree, so it is exactly what the extended tokenizer replaces. Computed in float32.
+
+**FOCUS is our own implementation, not `langsfer`.** Installing `langsfer` would downgrade `transformers` from 5.22 to 4.57, `numpy` from 2.4 to 1.26 and `tokenizers`, so it was not added. FOCUS here follows Dobler and de Melo (2023): new rows are a sparsemax-weighted sum of the old embeddings whose auxiliary vectors are most similar. The auxiliary vectors come from a positive-PMI co-occurrence matrix with a truncated SVD over the extended tokenization of the Urdu corpus, not from fastText. Results are labelled FOCUS-style. A token with no auxiliary vector falls back to mean of pieces and is counted.
+
+**Random control** draws each new row from a normal with the per-dimension mean and standard deviation of the old rows, so the scale is right and the content is arbitrary.
+
+**Quality metrics.** Bits per character (total cross-entropy over characters x ln 2) on three sets: held-out Urdu Wikipedia lines, FLORES Urdu, and FLORES English as a control. Every text gets the end-of-text token as one token of context so every real token is predicted. Texts are filtered by character count (at most 400), never by token count, so each tokenizer scores the same texts, and an over-long text raises instead of being silently cut. Belebele (`urd_Arab` and `eng_Latn`, 900 questions each) is scored zero-shot: the log-probability of each answer as a continuation of "P: passage Q: question A:". It is reported two ways: the plain sum (`acc`) and the sum divided by the answer's character count (`acc_char`). The sum favors tokenizers that need fewer tokens for an answer, so `acc_char` is the number to compare across tokenizers. Intervals are Wilson 95%; chance is 0.25.
+
+**Expected outcome, stated before measuring.** The new rows are untrained, so Urdu quality should be no better than the base and may be worse. English bits per character can only get worse (the new rows add probability mass to the softmax and English hidden states are unchanged). A cost saving is never reported without these numbers next to it.
+
+**Smoke run on Qwen3-0.6B (2026-11-16, fp32, CPU, 25 texts per set, 5 Belebele questions).** Not a result: samples are tiny and Belebele with 5 questions says nothing. It confirmed the pipeline on real weights and the expected direction. Urdu bits per character, held-out lines: base 2.80, mean of pieces 3.68, FOCUS-style 3.67, random 5.01. English FLORES: 1.273 base against 1.274 (mean), 1.275 (random), 1.277 (FOCUS-style), so English is almost untouched. Tokens per character on Urdu fell from 0.640 to 0.279. FOCUS-style had vector support for 8,952 of 10,000 new tokens (the rest fell back to mean) from only 20,000 corpus lines. Mean and FOCUS-style are indistinguishable at this sample size; both are far better than random and worse than the base, as expected for untrained rows. The 1.7B run on Kaggle with the full 1,000 texts per set and all 900 Belebele questions decides this. Local CPU cost: about 3 minutes per variant at this size, which is why the full run is on Kaggle.
+

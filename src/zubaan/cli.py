@@ -504,6 +504,119 @@ def extend_learn(
     )
 
 
+@extend_app.command("quality")
+def extend_quality(
+    config: Annotated[Path, typer.Option("--config", exists=True, help="YAML with extend:")],
+    base_model: Annotated[
+        Optional[str],  # noqa: UP045
+        typer.Option(help="Override extend.base_model: the model whose weights are extended"),
+    ] = None,
+    tokenizer_model: Annotated[
+        Optional[str],  # noqa: UP045
+        typer.Option(help="Override extend.tokenizer_model: where the merges were learned"),
+    ] = None,
+    out: Annotated[
+        Optional[Path],  # noqa: UP045
+        typer.Option(help="Results JSON (default extend.quality_output); finished variants resume"),
+    ] = None,
+) -> None:
+    """Extend a model with each size and init method, then measure quality and cost.
+
+    Needs the model weights (use a GPU or the 0.6B model). Nothing is trained: the new rows
+    are only initialized, so expect quality to be worse than the base model.
+    """
+    from zubaan.audit.acceptance_lm import load_causal_lm
+    from zubaan.bench.quality import load_belebele
+    from zubaan.extend.quality_run import (
+        check_weights_match_tokenizer,
+        run_quality,
+        select_bpc_texts,
+        summary_rows,
+    )
+    from zubaan.extend.sweep import load_merges
+    from zubaan.extend.tokenizer_info import load_tokenizer_json
+
+    cfg = _extend_config(config, base_model)
+    weights_model = cfg.base_model
+    tok_model = tokenizer_model or cfg.tokenizer_model or weights_model
+    if not cfg.merges_file.exists():
+        raise typer.BadParameter(f"{cfg.merges_file} not found; run 'zubaan extend learn' first")
+    base = load_tokenizer_json(tok_model)
+    try:
+        check_weights_match_tokenizer(load_tokenizer_json(weights_model), base)
+    except ValueError as e:
+        raise typer.BadParameter(str(e)) from e
+    merges = load_merges(cfg.merges_file)
+    if max(cfg.eval_sizes) > len(merges):
+        raise typer.BadParameter(
+            f"eval_sizes needs {max(cfg.eval_sizes)} merges, have {len(merges)}"
+        )
+    sets = {
+        "urdu_heldout": select_bpc_texts(
+            read_lines(cfg.heldout) if cfg.heldout else [], cfg.quality_texts, cfg.max_chars, True
+        ),
+        "urdu_flores": select_bpc_texts(
+            read_lines(cfg.eval_urdu), cfg.quality_texts, cfg.max_chars, True
+        ),
+        "english_flores": select_bpc_texts(
+            read_lines(cfg.eval_english), cfg.quality_texts, cfg.max_chars, False
+        ),
+    }
+    sets = {k: v for k, v in sets.items() if v}
+    belebele = {
+        lang: load_belebele(lang, cfg.belebele_questions) for lang in ("urd_Arab", "eng_Latn")
+    }
+    output = out or cfg.quality_output
+    meta = run_metadata([weights_model], cfg.corpus.parent / "urdu_meta.json")
+    meta["settings"] = {
+        "dtype": cfg.dtype,
+        "device": cfg.device,
+        "seed": cfg.seed,
+        "n_texts": {k: len(v) for k, v in sets.items()},
+        "belebele_questions": cfg.belebele_questions,
+        "tokenizer_model": tok_model,
+        "init_methods": cfg.init_methods,
+        "eval_sizes": cfg.eval_sizes,
+    }
+    results = run_quality(
+        weights_model,
+        lambda: load_causal_lm(weights_model, cfg.dtype, cfg.device),
+        base,
+        merges,
+        cfg.eval_sizes,
+        cfg.init_methods,
+        sets,
+        belebele,
+        output,
+        seed=cfg.seed,
+        focus_lines=read_lines(cfg.corpus, cfg.focus_lines),
+        focus_dim=cfg.focus_dim,
+        batch_size=cfg.batch_size,
+        device=cfg.device,
+        meta=meta,
+        log=console.print,
+    )
+    table = Table(title=f"Quality next to cost: {weights_model} (new rows untrained)")
+    cols = ["Variant", "Vocab", "Tok/char Urdu", "BPC Urdu held-out", "BPC Urdu FLORES"]
+    cols += ["BPC English", "Belebele urd", "Belebele eng"]
+    for col in cols:
+        table.add_column(col, justify="right")
+    for r in summary_rows(results):
+        table.add_row(
+            r["variant"],
+            f"{r['vocab_size']:,}",
+            f"{r.get('tokens_per_char_urdu_heldout', float('nan')):.3f}",
+            f"{r.get('bpc_urdu_heldout', float('nan')):.3f}",
+            f"{r.get('bpc_urdu_flores', float('nan')):.3f}",
+            f"{r.get('bpc_english_flores', float('nan')):.3f}",
+            f"{r['belebele_urd_Arab_acc_char']:.3f}",
+            f"{r['belebele_eng_Latn_acc_char']:.3f}",
+        )
+    console.print(table)
+    console.print("Lower bits per character is better; Belebele chance is 0.25.")
+    console.print(f"Saved {output}")
+
+
 @extend_app.command("sweep")
 def extend_sweep(
     config: Annotated[Path, typer.Option("--config", exists=True, help="YAML with extend:")],

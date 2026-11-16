@@ -19,7 +19,9 @@ Each stage ends with something usable and public. Estimates assume part-time wor
 - [x] Learn Urdu merges on top of the base tokenization; select merges that cannot touch English (`zubaan extend learn`)
 - [x] Merge into base tokenizer as real merges; English-unchanged and Urdu round-trip tests pass on Qwen3 (special token ids pinned)
 - [x] Token cost sweep (`zubaan extend sweep`), tokenizer only, no quality yet. Qwen3-1.7B Urdu cost multiplier 3.14x -> 1.40x (5k new tokens), 1.29x (10k), 1.22x (20k), 1.20x (32k), English unchanged
-- [ ] Resize embeddings and LM head; mean-of-pieces initialization (compare with langsfer FOCUS)
+- [x] Resize embeddings and LM head; mean-of-pieces, random and FOCUS-style initialization (own FOCUS implementation: `langsfer` conflicts with the pinned transformers and numpy). Validated on Qwen3-0.6B (CPU smoke run, 25 texts per set)
+- [x] Quality next to cost: bits per character (held-out Urdu, FLORES Urdu, FLORES English) and Belebele `urd_Arab`/`eng_Latn` (`zubaan extend quality`)
+- [ ] Full quality run on Qwen3-1.7B (Kaggle, `notebooks/02_extend_quality_qwen3.ipynb`, needs the commits pushed first)
 - [ ] GGUF export with pre-tokenizer fingerprint handling and HF vs llama.cpp parity test
 - [ ] Ollama Modelfile and vLLM config generation
 

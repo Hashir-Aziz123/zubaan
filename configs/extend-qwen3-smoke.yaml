@@ -1,0 +1,23 @@
+# Small local run on a CPU (8 GB RAM): validates the whole quality pipeline on Qwen3-0.6B with
+# a handful of texts and questions. These numbers are a smoke test, not results: Belebele with
+# 5 questions has a 95% interval of about +-0.3. The real run is the Kaggle notebook.
+#   uv run zubaan extend quality --config configs/extend-qwen3-smoke.yaml
+
+extend:
+  base_model: Qwen/Qwen3-0.6B
+  tokenizer_model: Qwen/Qwen3-1.7B      # same tokenizer; the merges were learned on it
+  corpus: data/urdu/urdu_train.txt
+  heldout: data/urdu/urdu_heldout.txt
+  eval_urdu: data/flores_urd.txt
+  eval_english: data/flores_eng.txt
+  merges_file: outputs/extend/merges.json
+  eval_sizes: [10000]
+  init_methods: [mean, random, focus]
+  dtype: float32
+  device: cpu
+  quality_texts: 25
+  max_chars: 400
+  belebele_questions: 5
+  batch_size: 2
+  focus_lines: 20000
+  quality_output: reports/extend_quality_smoke_qwen3-0.6b.json

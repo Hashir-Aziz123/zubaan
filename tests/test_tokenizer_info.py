@@ -122,3 +122,30 @@ def test_token_to_bytes_rejects_characters_outside_the_table():
         token_to_bytes("a b")
     # Special tokens made of printable ASCII do look like byte-level tokens; they are ASCII only.
     assert token_to_bytes("<|endoftext|>") == b"<|endoftext|>"
+
+
+def test_same_tokenizer_detects_every_kind_of_difference(tiny_base_json):
+    import copy
+
+    from zubaan.extend.tokenizer_info import same_tokenizer
+
+    assert same_tokenizer(tiny_base_json, copy.deepcopy(tiny_base_json))
+    for mutate in (
+        lambda d: d["model"]["vocab"].update({"zz": 9999}),
+        lambda d: d["model"]["merges"].pop(),
+        lambda d: d["added_tokens"].pop(),
+        lambda d: d.update(normalizer=None),
+        lambda d: d["pre_tokenizer"]["pretokenizers"].pop(),
+    ):
+        other = copy.deepcopy(tiny_base_json)
+        mutate(other)
+        assert not same_tokenizer(tiny_base_json, other)
+
+
+@pytest.mark.slow
+def test_qwen3_0_6b_and_1_7b_share_one_tokenizer():
+    """One set of merges serves both models, which is what a shared-vocabulary drafter needs."""
+    from zubaan.extend.tokenizer_info import same_tokenizer
+
+    big, small = load_tokenizer_json("Qwen/Qwen3-1.7B"), load_tokenizer_json("Qwen/Qwen3-0.6B")
+    assert same_tokenizer(big, small)

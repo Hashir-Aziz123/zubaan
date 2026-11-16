@@ -76,6 +76,22 @@ class ExtendConfig(BaseModel):
     max_lines: int | None = Field(default=None, description="Use only the first N training lines")
     min_count: int = Field(default=2, description="A merge must save at least this many tokens")
     merges_file: Path = Path("outputs/extend/merges.json")
+    # Quality evaluation (zubaan extend quality). Weights come from base_model; the tokenizer
+    # the merges were learned on comes from tokenizer_model (default: base_model) and must be
+    # identical to the weights' own tokenizer.
+    tokenizer_model: str | None = None
+    eval_sizes: list[int] = Field(default=[10_000, 20_000], description="New-token counts to test")
+    init_methods: list[str] = Field(default=["mean", "random", "focus"])
+    dtype: str = Field(default="float32", description="float32 | bfloat16 | float16")
+    device: str = "cpu"
+    quality_texts: int | None = Field(default=300, description="Texts per BPC set (None = all)")
+    max_chars: int = Field(default=400, description="Skip BPC texts longer than this")
+    belebele_questions: int | None = Field(default=100, description="Per language (None = 900)")
+    batch_size: int = 2
+    focus_lines: int = Field(default=30_000, description="Corpus lines used for FOCUS vectors")
+    focus_dim: int = 100
+    seed: int = 0
+    quality_output: Path = Path("reports/extend_quality.json")
     init_method: str = Field(default="mean", description="mean | focus | random")
     output_dir: Path = Path("outputs/extended")
 
