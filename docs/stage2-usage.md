@@ -122,4 +122,4 @@ The 1.7B quality run is `notebooks/02_extend_quality_qwen3.ipynb` on Kaggle (T4,
 - New rows are untrained (Stage 3).
 - One corpus (Urdu Wikipedia) and one seed.
 - The Ollama Modelfile was accepted by `ollama create` (0.40.16) and answered a chat request on the 0.6B. Qwen3 starts replies with a `<think>` block, which the Modelfile does not suppress.
-- vLLM has not been started on a GPU yet: the config uses documented `vllm serve` options, and the 03 notebook has an optional cell for it.
+- vLLM has not been started on a GPU yet. `notebooks/04_vllm_check_qwen3.ipynb` does it on a Kaggle T4 (not a P100: vLLM needs compute capability 7.0 or higher) from the 03 output, and also checks that vLLM tokenizes Urdu exactly like the extended `tokenizer.json`.
