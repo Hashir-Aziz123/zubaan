@@ -1,0 +1,32 @@
+# Stage 2 end to end for Qwen3-1.7B, the project target. Needs about 8 GB free RAM.
+#   uv run zubaan extend run --config configs/export-qwen3-1.7b.yaml
+#   uv run zubaan export all --config configs/export-qwen3-1.7b.yaml
+# Needs llama.cpp release b12477 in tools/ (see docs/stage2-usage.md) and the Urdu corpus
+# from 'zubaan data urdu'. The new embedding rows are initialized, not trained.
+
+extend:
+  base_model: Qwen/Qwen3-1.7B
+  corpus: data/urdu/urdu_train.txt
+  heldout: data/urdu/urdu_heldout.txt
+  eval_urdu: data/flores_urd.txt
+  eval_english: data/flores_eng.txt
+  n_new_tokens: 10000
+  sizes: [10000]
+  init_method: mean
+  merges_file: outputs/extend/merges.json   # learned on the Qwen3 tokenizer, shared by 0.6B
+  output_dir: outputs/qwen3-1.7b
+  model_dtype: bfloat16
+
+export:
+  model_dir: outputs/qwen3-1.7b/model
+  base_model: Qwen/Qwen3-1.7B
+  output_dir: outputs/qwen3-1.7b/export
+  name: qwen3-1.7b-urdu
+  llama_cpp_dir: tools/llama.cpp-b12477
+  quants: [Q4_K_M, Q8_0]
+  calibration: data/urdu/urdu_train.txt
+  calibration_chars: 200000
+  imatrix_chunks: 40
+  parity_urdu: data/flores_urd.txt
+  parity_english: data/flores_eng.txt
+  max_model_len: 4096
