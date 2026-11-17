@@ -32,8 +32,9 @@ Each stage ends with something usable and public. Estimates assume part-time wor
 - [x] Kaggle notebook for the 1.7B: `notebooks/03_extend_export_qwen3.ipynb` (CPU session, extend, verify, GGUF with parity, Q4_K_M and Q8_0, Modelfile, vLLM config). Needs the pinned commit pushed first; run on Kaggle: 1.7B parity passed
 - [x] `ollama create` accepts the generated Modelfile and chat works through its ChatML template (Ollama 0.40.16, Q4_K_M of the 0.6B; both stop tokens registered). The reply is a `<think>` block in English that misreads the Urdu question, as expected for untrained rows
 - [x] Kaggle notebook for the vLLM check: `notebooks/04_vllm_check_qwen3.ipynb` (GPU T4, takes the 03 output as an input; starts vLLM with the generated config, compares vLLM tokenization of Urdu with the extended `tokenizer.json`, requests a completion). Run on a Kaggle T4: vLLM 0.34.0 passed (tokenization identical, completion and chat work)
-- [ ] Run the 04 notebook on Kaggle (needs the 03 run to finish first)
-- [ ] Run `notebooks/03_extend_export_qwen3.ipynb` on Kaggle to extend and export Qwen3-1.7B itself (the 0.6B shares the tokenizer, so the merges are identical)
+- [x] 04 notebook run on a Kaggle T4: vLLM serves the extended 1.7B (see above)
+- [x] 03 notebook run on Kaggle: Qwen3-1.7B extended and exported, parity passed (2,041 of 2,045 identical, 4 NFC-only, 0 real mismatches), no converter patch, Q4_K_M and Q8_0 built
+- [x] Chat template fix (2026-11-18): saved models now carry `tokenizer_config.json`
 
 ## Stage 3: adapt (2 to 3 weeks)
 

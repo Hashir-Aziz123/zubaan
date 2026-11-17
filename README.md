@@ -26,7 +26,7 @@ Research has shown fixes for both: extend the tokenizer with target-language tok
 | `zubaan extend` | Adds target-language merges to a tokenizer, initializes new embeddings, saves and verifies the model | Working (new rows untrained) |
 | `zubaan adapt` | Short continued pretraining recipe sized for a free Kaggle GPU | Planned |
 | `zubaan draft` | Drafters that share the extended vocabulary | Planned |
-| `zubaan export` | GGUF (with tokenizer parity checks), vLLM and Ollama configs | Built; real GGUF run pending |
+| `zubaan export` | GGUF (with tokenizer parity checks), vLLM and Ollama configs | Done for Qwen3-0.6B and 1.7B; parity passed, vLLM and Ollama checked |
 | `zubaan bench` | End-to-end benchmarks with tokenizer-fair metrics | Planned |
 
 ## Fair metrics

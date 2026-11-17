@@ -1,6 +1,6 @@
 # Stage 2 plan: extend and export
 
-Draft, 2026-11-16, updated 2026-11-17. Chunks 0 to 12 are built; the remaining items are a vLLM start on a GPU and running the 1.7B notebook on Kaggle (see "Status" at the end). Based on `docs/roadmap.md` and `CLAUDE.md`.
+Draft, 2026-11-16, updated 2026-11-17. All chunks (0 to 12) are built and the Kaggle runs are done: the 1.7B export passed parity and vLLM served the model (see "Status" at the end). Based on `docs/roadmap.md` and `CLAUDE.md`.
 
 **Goal.** Take a base model (Qwen3-1.7B) and an Urdu text file, and produce an extended model whose tokenizer costs far fewer tokens on Urdu, plus the GGUF, Ollama and vLLM files to run it.
 
@@ -161,3 +161,9 @@ Differences from the plan above, all recorded in `docs/decisions.md`:
 - **Chunk 10** (`export/ollama.py`, `export/vllm.py`) is built and snapshot-tested. `ollama create` accepted the Modelfile and a chat request worked (Ollama 0.40.16, 0.6B Q4_K_M). A real vLLM start is still to do (`notebooks/04_vllm_check_qwen3.ipynb`, Kaggle T4).
 - **Chunk 11** (`zubaan extend run`, `zubaan export gguf|ollama|vllm|all`) replaces the "not implemented" placeholder. The tiny-fixture end-to-end tests are `tests/test_extend_run.py` and `tests/test_export_pipeline.py`.
 - **Chunk 12:** `docs/stage2-usage.md`, the extension report (`zubaan report extend`), roadmap and decisions are updated.
+
+## Status (2026-11-18): stage 2 done
+
+- `notebooks/03_extend_export_qwen3.ipynb` ran on Kaggle (CPU): Qwen3-1.7B extended with 10,000 tokens, parity 2,041 of 2,045 identical, 4 NFC-only, 0 real mismatches, `qwen2` pre-tokenizer, no converter patch, Q4_K_M and Q8_0 built.
+- `notebooks/04_vllm_check_qwen3.ipynb` ran on a Kaggle T4: vLLM 0.34.0 served the extended model with `dtype half`; tokenization identical to `tokenizer.json`; completion and chat answered. The run found that saved models lacked the chat template, which is fixed.
+- Remaining work belongs to stage 3 (the new rows are still untrained).

@@ -4,7 +4,52 @@ Stage 1 measured the problem. Stage 2 fixes the token cost: it adds Urdu tokens 
 
 **Read this first.** After Stage 2 the model has **not learned** its new tokens. The new embedding rows are only initialized, so Urdu quality is worse than the base model until Stage 3 trains them (see the results in [the extension report](reports/tokenizer-extension/index.md)). Stage 2 lowers the token cost; it is not a model to hand to users yet.
 
+Status: **Stage 2 is done** (2026-11-18). Qwen3-0.6B and 1.7B are extended and exported, GGUF parity passed on both, and vLLM served the 1.7B.
+
 Currently Urdu only, on the Qwen3 family. The code is language-agnostic except for the Urdu-specific normalization and the Arabic-script merge filter.
+
+## What Stage 2 did, and how
+
+**The problem.** Qwen3's tokenizer was built mostly from English. On FLORES-200 (the same sentences in both languages) Urdu needs 3.14 times as many tokens as English. Every token costs money, takes a forward pass, and uses context.
+
+**The fix, in five steps.**
+
+1. **Learn Urdu merges.** Byte-pair encoding (BPE) builds a vocabulary by repeatedly merging the most frequent adjacent pair. We continued Qwen3's own BPE on cleaned, normalized Urdu Wikipedia text (FLORES removed so the test sentences are never seen) and kept only merges whose UTF-8 bytes lead with the Arabic block (`0xD8` to `0xDB`). That filter is why English tokenization cannot change. The new merges are appended to the end of `tokenizer.json` as real merges, not `added_tokens`, and the special-token ids stay pinned.
+2. **Give the new tokens embedding rows.** The embedding matrix and LM head get one new row per new token. Rows start from the mean of the embeddings of the pieces the token used to split into (default), a FOCUS-style similarity average, or random. Nothing is trained, so these are guesses.
+3. **Save and verify the model folder** (`extend run`). The checks: only `model.vocab` and `model.merges` differ from the base tokenizer, English tokenizes identically, Urdu round-trips, and the config and weights have one row per id.
+4. **Export** (`export all`). Convert to GGUF with llama.cpp `b12477`, **prove tokenizer parity** (Hugging Face against `llama-tokenize` on 2,045 texts), build an importance matrix from Urdu text, and quantize to Q4_K_M and Q8_0. Write an Ollama Modelfile and a vLLM config with `dtype half`.
+5. **Measure quality next to cost.** Bits per character and Belebele, so a cheaper tokenizer cannot hide a worse model.
+
+**What we found.**
+
+| Result | Value |
+| --- | --- |
+| Urdu cost multiplier, base | 3.14x |
+| With 5k / 10k / 20k / 32k new tokens | 1.40x / 1.29x / 1.22x / 1.20x |
+| English tokenization after extension | byte-identical to the base |
+| Held-out Urdu bits per character (1.7B) | 2.31 base, 3.57 with 10k mean init, 3.63 focus, 5.27 random |
+| Belebele Urdu `acc_char` | 33.4% base, 24.9% to 27.0% extended (chance 25%) |
+| Parity, Qwen3-1.7B | 2,041 of 2,045 identical, 4 differ only by NFC, 0 real mismatches |
+| GGUF sizes, Qwen3-0.6B | Q4_K_M 405 MB, Q8_0 651 MB |
+| vLLM 0.34.0 on a Kaggle T4 | tokenization identical, completion and chat answer |
+
+So the tokenizer is much cheaper, but the model is worse at Urdu until it learns the new rows. That is Stage 3. We chose 10,000 tokens with mean-of-pieces init as the default because it keeps most of the saving (1.29x) with the least quality loss; random init is clearly worst.
+
+**Things found along the way** (all in `docs/decisions.md`):
+
+- The converter's tokenizer fingerprint uses a test string with no Arabic characters, so the extended tokenizer hashes the same as Qwen's and needs no patch. The parity test, not that hash, is the proof.
+- llama.cpp does not apply NFC and Qwen's Hugging Face tokenizer does, so 4 FLORES lines with stacked diacritics tokenize differently. This is the base model against llama.cpp, not the extension. The parity report counts them separately.
+- vLLM needs compute capability 7.0, so a Kaggle P100 cannot run it and a T4 can.
+- The saved model lacked `tokenizer_config.json`, so vLLM chat answered HTTP 400. Fixed on 2026-11-18.
+
+**Where each piece ran.**
+
+| Step | Where |
+| --- | --- |
+| Tokenizer learn, sweep, 0.6B extend and export, Ollama test | the 8 GB laptop |
+| 1.7B quality run (`02_extend_quality_qwen3.ipynb`) | Kaggle T4, about 2 hours |
+| 1.7B extend and export (`03_extend_export_qwen3.ipynb`) | Kaggle CPU, about 1 hour |
+| vLLM check (`04_vllm_check_qwen3.ipynb`) | Kaggle GPU T4 |
 
 ## The commands at a glance
 
@@ -64,7 +109,7 @@ uv run zubaan extend run --config configs/export-qwen3-0.6b.yaml
 
 Options: `--n-new`, `--method mean|focus|random`, `--json`. The model is saved in `bfloat16` by default (`extend.model_dtype`, Qwen3's own dtype). Embedding math runs in float32 first.
 
-**Memory.** Qwen3-0.6B ran in about 40 seconds on the 8 GB laptop. Qwen3-1.7B needs about 8 GB free; use a machine with more RAM, or Kaggle with `notebooks/03_extend_export_qwen3.ipynb`, which runs every step of this guide for the 1.7B on a CPU session (about 1 hour; push the pinned commit to GitHub first).
+**Memory.** Qwen3-0.6B ran in about 40 seconds on the 8 GB laptop. Qwen3-1.7B needs about 8 GB free; use a machine with more RAM, or Kaggle with `notebooks/03_extend_export_qwen3.ipynb` (see the notebook table below).
 
 The folder also holds `zubaan_extension.json` (base model, size, init method, `trained: false`).
 
@@ -116,6 +161,16 @@ The 1.7B quality run is `notebooks/02_extend_quality_qwen3.ipynb` on Kaggle (T4,
 - **Bits per character** is the quality metric. Never compare per-token perplexity across tokenizers.
 - **Belebele** is scored with `acc_char` (answer log-probability divided by answer characters), which is fair across tokenizers. Chance is 25%.
 - **Parity passed** means llama.cpp tokenizes exactly like Hugging Face on the test set. It is evidence, not a proof for every possible string; extend the stress set if you add scripts.
+
+## Kaggle notebooks
+
+| Notebook | Session | Does | Output to keep |
+| --- | --- | --- | --- |
+| `02_extend_quality_qwen3.ipynb` | GPU T4 | Quality sweep for the 1.7B (float32) | `extend_quality_qwen3-1.7b.json`, `extend_sweep.json` |
+| `03_extend_export_qwen3.ipynb` | CPU | Every step of this guide for the 1.7B | `export/export_summary.json`, GGUF files, `extended/model/` |
+| `04_vllm_check_qwen3.ipynb` | GPU T4 (not P100) | Starts vLLM on the 03 model, checks tokenization, completion and chat | `vllm_check.json` |
+
+Each installs zubaan at a pinned commit that must be on GitHub (`python notebooks/make_0N_notebook.py [COMMIT]` regenerates it). 04 takes the 03 output through Add Input > Notebooks and repairs a model folder that lacks the chat template.
 
 ## Limitations
 
