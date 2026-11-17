@@ -20,7 +20,7 @@ The pipeline, one CLI command per stage:
 | `zubaan audit acceptance` | Draft/target acceptance rate on a corpus | 1 |
 | `zubaan report tax` / `report extend` | "The Urdu language tax" and "Tokenizer extension" reports: Markdown plus charts in `docs/reports/` | 1, 2 |
 | `zubaan extend` | `learn`, `sweep`, `quality`, `run`: add target-language merges, resize and initialize embeddings, save and verify the model | 2 (done; rows untrained) |
-| `zubaan export` | `gguf` (with tokenizer parity check), `ollama`, `vllm`, `all` | 2 (code done; real GGUF run pending) |
+| `zubaan export` | `gguf` (with tokenizer parity check), `ollama`, `vllm`, `all` | 2 (done; 1.7B parity passed) |
 | `zubaan adapt` | Continued pretraining so the model learns new tokens (Kaggle) | 3 |
 | `zubaan draft` | Drafters sharing the extended vocabulary: distilled small model, n-gram | 4 |
 | `zubaan bench` | Benchmarks against running servers with tokenizer-fair metrics | 5 |

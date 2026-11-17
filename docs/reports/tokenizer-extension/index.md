@@ -76,7 +76,7 @@ Random initialization is the worst in every comparison. Mean of pieces and FOCUS
 
 ## GGUF export
 
-Exported model: `Qwen/Qwen3-0.6B` with the same 10,000 new tokens. Qwen3-0.6B shares Qwen3-1.7B's
+Exported model: `Qwen/Qwen3-1.7B` with the same 10,000 new tokens. Qwen3-0.6B shares Qwen3-1.7B's
 tokenizer exactly, so the tokenizer results carry over; the quality numbers above are for 1.7B.
 llama.cpp release `b12477`. The converter's pre-tokenizer type is
 `qwen2` (fingerprint `e636dc30a262dcc0...`). The converter recognized the extended tokenizer without any change. This is only
@@ -85,7 +85,7 @@ valid because the extension leaves the pre-tokenizer untouched, which is checked
 **Tokenizer parity:** 2,041 of 2,045 texts (FLORES Urdu,
 FLORES English and a stress set with emoji, numbers, mixed script, an empty string and very long
 lines) tokenize to identical ids with Hugging Face and llama.cpp. The other 4 texts are not in Unicode NFC form (Arabic diacritics stacked in a different order than NFC puts them). Qwen's tokenizer normalizes to NFC before tokenizing and llama.cpp's BPE tokenizer does not, so the ids differ for such text. For every one of them llama.cpp gives exactly Hugging Face's ids once the text is NFC-normalized first, so the vocabulary and merges are identical. This comes from the base model and llama.cpp, not from the extension. Normalize Urdu to NFC before sending it to a GGUF model (`zubaan.text.normalize_urdu` does). Quantized files:
-`qwen3-0.6b-urdu-Q4_K_M.gguf`, `qwen3-0.6b-urdu-Q8_0.gguf`, calibrated with an importance matrix built from Urdu Wikipedia (training split).
+`qwen3-1.7b-urdu-Q4_K_M.gguf`, `qwen3-1.7b-urdu-Q8_0.gguf`, calibrated with an importance matrix built from Urdu Wikipedia (training split).
 
 ## Limitations
 
