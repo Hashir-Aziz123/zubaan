@@ -133,6 +133,8 @@ def test_notebook4_finds_the_model_by_its_marker_file(notebook4, tmp_path):
     (inputs / "zubaan_extension.json").write_text('{"trained": false}', encoding="utf-8")
     (inputs / "model.safetensors").write_bytes(b"x")
     (inputs / "tokenizer.json").write_text("{}", encoding="utf-8")
+    (inputs / "tokenizer_config.json").write_text("{}", encoding="utf-8")
+    assert "model_with_template" in cell  # fallback for exports that lack the chat template
     env = {"json": __import__("json")}
     exec(compile(cell.replace('"/kaggle/input"', repr(str(tmp_path / "input"))), "c", "exec"), env)
     assert env["MODEL_DIR"] == inputs

@@ -8,6 +8,7 @@ file avoids assuming them.
 
 from __future__ import annotations
 
+import contextlib
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -109,6 +110,11 @@ def find_local_files(name_or_path: str) -> Path:
             if fname == "tokenizer.json":
                 raise
     assert folder is not None
+    # Small optional files. tokenizer_config.json carries the chat template, so a model saved
+    # without it cannot serve /v1/chat/completions.
+    for fname in ("tokenizer_config.json", "generation_config.json", "special_tokens_map.json"):
+        with contextlib.suppress(Exception):
+            hf_hub_download(name_or_path, fname)
     return folder
 
 

@@ -52,11 +52,14 @@ import subprocess
 
 # CHECK 2: a GPU that vLLM supports. vLLM needs compute capability 7.0 or higher: a Kaggle T4 is 7.5,
 # a P100 is 6.0 and does NOT work. Pick "GPU T4 x2" in the notebook settings.
-r = subprocess.run(
-    ["nvidia-smi", "--query-gpu=name,compute_cap,memory.total", "--format=csv,noheader"],
-    capture_output=True,
-    text=True,
-)
+try:
+    r = subprocess.run(
+        ["nvidia-smi", "--query-gpu=name,compute_cap,memory.total", "--format=csv,noheader"],
+        capture_output=True,
+        text=True,
+    )
+except FileNotFoundError:
+    raise SystemExit("No GPU in this session (nvidia-smi is missing). Settings > Accelerator > GPU T4 x2, then run again.") from None
 assert r.returncode == 0, "no GPU found: turn on a GPU accelerator (T4) in the notebook settings"
 print(r.stdout)
 name, cap, mem = [x.strip() for x in r.stdout.splitlines()[0].split(",")]
@@ -80,6 +83,29 @@ print("model folder:", MODEL_DIR)
 print(json.dumps(json.loads(markers[0].read_text()), indent=1))
 assert (MODEL_DIR / "model.safetensors").exists() or list(MODEL_DIR.glob("model-*.safetensors")), "no weights in the model folder"
 assert (MODEL_DIR / "tokenizer.json").exists(), "no tokenizer.json in the model folder"
+
+# Older exports (before zubaan fixed this) lack tokenizer_config.json, which holds Qwen's chat template,
+# so /v1/chat/completions answers 400. Make a working folder: weights and the extended tokenizer are
+# linked unchanged, and only the missing small config files come from the base model.
+meta = json.loads(markers[0].read_text())
+if not (MODEL_DIR / "tokenizer_config.json").exists():
+    import shutil
+
+    from huggingface_hub import hf_hub_download
+
+    patched = Path("/kaggle/working/model_with_template")
+    shutil.rmtree(patched, ignore_errors=True)
+    patched.mkdir(parents=True)
+    for f in MODEL_DIR.iterdir():
+        (patched / f.name).symlink_to(f)
+    for fname in ("tokenizer_config.json", "special_tokens_map.json"):
+        if not (patched / fname).exists():
+            try:
+                shutil.copy(hf_hub_download(meta["base_model"], fname), patched / fname)
+            except Exception as e:
+                print("could not fetch", fname, e)
+    MODEL_DIR = patched
+    print("added the base model's tokenizer_config.json; using", MODEL_DIR)
 """
 
 INSTALL_VLLM = """
