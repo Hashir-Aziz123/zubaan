@@ -2,7 +2,7 @@
 
 **Urdu users pay more and wait longer for AI than English users. zubaan measures that gap and produces a faster, cheaper model you can actually deploy.**
 
-> Status: pre-alpha. Stage 1 (`audit fertility`) works; later stages are planned. See [docs/roadmap.md](docs/roadmap.md).
+> Status: pre-alpha. Stages 1 (audit) and 2 (extend and export) are built; adapt, draft and bench are planned. Stage 2 adds Urdu tokens but does not train them yet, so Urdu quality is worse than the base model until stage 3. See [docs/roadmap.md](docs/roadmap.md).
 
 ## The problem
 
@@ -21,11 +21,12 @@ Research has shown fixes for both: extend the tokenizer with target-language tok
 | Command | What it does | Status |
 | --- | --- | --- |
 | `zubaan audit fertility` | Tokens per word and cost multiplier versus a parallel English corpus | Working |
-| `zubaan audit acceptance` | Speculative decoding acceptance rate for a draft/target pair | Planned |
-| `zubaan extend` | Adds target-language merges to a tokenizer and initializes new embeddings | Planned |
+| `zubaan audit compare` | Fertility for several tokenizers on the same data | Working |
+| `zubaan audit acceptance` | Speculative decoding acceptance rate for a draft/target pair | Working |
+| `zubaan extend` | Adds target-language merges to a tokenizer, initializes new embeddings, saves and verifies the model | Working (new rows untrained) |
 | `zubaan adapt` | Short continued pretraining recipe sized for a free Kaggle GPU | Planned |
 | `zubaan draft` | Drafters that share the extended vocabulary | Planned |
-| `zubaan export` | GGUF (with tokenizer parity checks), vLLM and Ollama configs | Planned |
+| `zubaan export` | GGUF (with tokenizer parity checks), vLLM and Ollama configs | Built; real GGUF run pending |
 | `zubaan bench` | End-to-end benchmarks with tokenizer-fair metrics | Planned |
 
 ## Fair metrics
@@ -44,6 +45,7 @@ Quality is compared with bits per character for the same reason.
 pip install "zubaan[audit]"        # once published; for now, install from source:
 git clone <repo-url> && cd zubaan
 uv sync --group dev --extra audit
+# add --extra report for charts and --extra export for GGUF export
 ```
 
 ## Quick start
@@ -54,6 +56,17 @@ zubaan audit fertility \
   --corpus data/flores_urd.txt \
   --reference data/flores_eng.txt
 ```
+
+Extend a model and export it (see [docs/stage2-usage.md](docs/stage2-usage.md)):
+
+```bash
+uv run zubaan extend run --config configs/export-qwen3-0.6b.yaml
+uv run zubaan export all --config configs/export-qwen3-0.6b.yaml   # needs llama.cpp, see the guide
+```
+
+On Qwen3-1.7B, 10,000 new Urdu tokens cut the Urdu token cost from 3.14x to 1.29x the English cost
+of the same text. Quality is worse until stage 3 trains the new tokens; see the
+[extension report](docs/reports/tokenizer-extension/index.md).
 
 Use a parallel corpus such as FLORES-200 (`urd_Arab` and `eng_Latn`) so the cost multiplier compares the same content.
 

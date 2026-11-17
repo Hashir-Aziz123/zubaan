@@ -6,9 +6,11 @@ nav:
   - Home: index.md
   - Roadmap: roadmap.md
   - Stage 1 usage: stage1-usage.md
+  - Stage 2 usage: stage2-usage.md
   - Decisions: decisions.md
   - Reports:
       - The Urdu language tax: reports/urdu-language-tax/index.md
+      - Tokenizer extension: reports/tokenizer-extension/index.md
 markdown_extensions:
   - tables
   - admonition

@@ -21,9 +21,18 @@ Each stage ends with something usable and public. Estimates assume part-time wor
 - [x] Token cost sweep (`zubaan extend sweep`), tokenizer only, no quality yet. Qwen3-1.7B Urdu cost multiplier 3.14x -> 1.40x (5k new tokens), 1.29x (10k), 1.22x (20k), 1.20x (32k), English unchanged
 - [x] Resize embeddings and LM head; mean-of-pieces, random and FOCUS-style initialization (own FOCUS implementation: `langsfer` conflicts with the pinned transformers and numpy). Validated on Qwen3-0.6B (CPU smoke run, 25 texts per set)
 - [x] Quality next to cost: bits per character (held-out Urdu, FLORES Urdu, FLORES English) and Belebele `urd_Arab`/`eng_Latn` (`zubaan extend quality`)
-- [ ] Full quality run on Qwen3-1.7B (Kaggle, `notebooks/02_extend_quality_qwen3.ipynb`, needs the commits pushed first)
-- [ ] GGUF export with pre-tokenizer fingerprint handling and HF vs llama.cpp parity test
-- [ ] Ollama Modelfile and vLLM config generation
+- [x] Full quality run on Qwen3-1.7B (Kaggle T4, `notebooks/02_extend_quality_qwen3.ipynb`): bits per character on held-out Urdu 2.31 (base) -> 3.57 (10k, mean of pieces); Belebele Urdu back to chance. English unchanged. Untrained rows cost quality, as expected; stage 3 trains them
+- [x] Save the extended model and verify the folder (`zubaan extend run`); built and verified on Qwen3-0.6B locally (10,000 new tokens, 161,669 rows, English identical and Urdu round-trip on 1,012 FLORES texts)
+- [x] GGUF export code: pinned llama.cpp `b12477`, pre-tokenizer fingerprint handling, HF vs llama.cpp parity test, Urdu importance matrix, Q4_K_M and Q8_0 (`zubaan export gguf`). Unit-tested with a fake llama.cpp
+- [x] Ollama Modelfile and vLLM config generation (`zubaan export ollama`, `export vllm`); snapshot tests, no `bfloat16`, stop tokens checked against the vocabulary
+- [x] One command each way: `zubaan extend run` and `zubaan export all`, config driven, `--json`
+- [x] Docs: `docs/stage2-usage.md`, report `docs/reports/tokenizer-extension/`, decisions
+- [x] **Real GGUF run on Qwen3-0.6B with 10,000 new tokens** (llama.cpp `b12477`): converter recognized the tokenizer as `qwen2` with no patch; HF vs llama.cpp parity on 2,045 texts: 2,041 identical, 4 differ only because the text is not NFC (llama.cpp has no NFC normalizer), 0 real mismatches. F16 1.2 GB, Q8_0 651 MB, Q4_K_M 405 MB (Urdu imatrix)
+- [x] Q4_K_M loads and generates on CPU with `llama-completion` (34 tokens/s, 4 threads, 0.6B). The Urdu prompt "the capital of Pakistan" is 3 tokens (13 with the base tokenizer); the text itself is nonsense and drifts into Bengali, as expected for untrained rows
+- [x] Kaggle notebook for the 1.7B: `notebooks/03_extend_export_qwen3.ipynb` (CPU session, extend, verify, GGUF with parity, Q4_K_M and Q8_0, Modelfile, vLLM config). Needs the pinned commit pushed first; not yet run on Kaggle
+- [x] `ollama create` accepts the generated Modelfile and chat works through its ChatML template (Ollama 0.40.16, Q4_K_M of the 0.6B; both stop tokens registered). The reply is a `<think>` block in English that misreads the Urdu question, as expected for untrained rows
+- [ ] Start vLLM with the generated config on a Kaggle GPU (optional cell in the 03 notebook, off by default; not run yet)
+- [ ] Run `notebooks/03_extend_export_qwen3.ipynb` on Kaggle to extend and export Qwen3-1.7B itself (the 0.6B shares the tokenizer, so the merges are identical)
 
 ## Stage 3: adapt (2 to 3 weeks)
 

@@ -1,6 +1,6 @@
 # Stage 2 plan: extend and export
 
-Draft, 2026-11-16. Chunks 0 to 5 are built (see "Status" at the end). Based on `continue.md`, `docs/roadmap.md` and `CLAUDE.md`. Nothing here is built yet.
+Draft, 2026-11-16, updated 2026-11-17. Chunks 0 to 12 are built; the remaining items are a vLLM start on a GPU and running the 1.7B notebook on Kaggle (see "Status" at the end). Based on `docs/roadmap.md` and `CLAUDE.md`.
 
 **Goal.** Take a base model (Qwen3-1.7B) and an Urdu text file, and produce an extended model whose tokenizer costs far fewer tokens on Urdu, plus the GGUF, Ollama and vLLM files to run it.
 
@@ -153,3 +153,11 @@ Differences from the plan above, all recorded in `docs/decisions.md`:
 - **Chunk 5** vocabulary sizes are 5k, 10k, 20k and 32k (your choice). Results are in the roadmap. Stage 1's `audit fertility` run on the saved extended tokenizer gives the same 1.29x as the sweep for 10k, with English tokens identical to the base (27,621).
 - The corpus is capped at 100 MB (295,905 lines); the full file had 785,348 training lines.
 
+## Status (2026-11-17): chunks 6 to 12 built
+
+- **Chunks 6 to 8** (`extend/init_emb.py`, `focus.py`, `quality_run.py`, `bench/quality.py`) ran on Kaggle for Qwen3-1.7B. Results and the default for stage 3 (10k new tokens, mean of pieces) are in `docs/decisions.md` and `docs/reports/tokenizer-extension/`. The Belebele harness lives in `bench/quality.py` as planned; the run orchestration is `extend/quality_run.py`.
+- **A gap in the plan:** nothing saved the extended model. `extend/build.py` and `zubaan extend run` now do, and verify the saved folder (tokenizer diff, English unchanged, Urdu round-trip, embedding rows).
+- **Chunk 9** (`export/gguf.py`, `export/parity.py`, `export/pipeline.py`) is built and unit-tested with a fake llama.cpp. The expected "pre-tokenizer not recognized" error does **not** occur on release `b12477`: the converter's test string has no Arabic-script characters, so the fingerprint equals the base's. The patch path exists for other cases. The real run on Qwen3-0.6B (10,000 new tokens) passed: parity 2,041 of 2,045 identical, the other 4 differ only because llama.cpp does not apply NFC (see `docs/decisions.md`, 2026-11-17), 0 real mismatches, and Q4_K_M and Q8_0 were produced with an Urdu imatrix. The Q4_K_M loads and generates on CPU (34 tokens/s; nonsense text, as expected for untrained rows).
+- **Chunk 10** (`export/ollama.py`, `export/vllm.py`) is built and snapshot-tested. `ollama create` accepted the Modelfile and a chat request worked (Ollama 0.40.16, 0.6B Q4_K_M). A real vLLM start is still to do (optional cell in the 03 notebook).
+- **Chunk 11** (`zubaan extend run`, `zubaan export gguf|ollama|vllm|all`) replaces the "not implemented" placeholder. The tiny-fixture end-to-end tests are `tests/test_extend_run.py` and `tests/test_export_pipeline.py`.
+- **Chunk 12:** `docs/stage2-usage.md`, the extension report (`zubaan report extend`), roadmap and decisions are updated.

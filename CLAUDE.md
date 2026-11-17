@@ -18,9 +18,9 @@ The pipeline, one CLI command per stage:
 | `zubaan audit fertility` | Tokens per word, chars per token, cost vs a parallel reference corpus | 1 (done) |
 | `zubaan audit compare` | Fertility for several tokenizers on the same data, CSV and JSON table | 1 |
 | `zubaan audit acceptance` | Draft/target acceptance rate on a corpus | 1 |
-| `zubaan report tax` | "The Urdu language tax" report: Markdown plus charts in `docs/reports/` | 1 |
-| `zubaan extend` | Add target-language merges, resize and initialize embeddings | 2 |
-| `zubaan export` | GGUF (with tokenizer parity check), vLLM config, Ollama Modelfile | 2 |
+| `zubaan report tax` / `report extend` | "The Urdu language tax" and "Tokenizer extension" reports: Markdown plus charts in `docs/reports/` | 1, 2 |
+| `zubaan extend` | `learn`, `sweep`, `quality`, `run`: add target-language merges, resize and initialize embeddings, save and verify the model | 2 (done; rows untrained) |
+| `zubaan export` | `gguf` (with tokenizer parity check), `ollama`, `vllm`, `all` | 2 (code done; real GGUF run pending) |
 | `zubaan adapt` | Continued pretraining so the model learns new tokens (Kaggle) | 3 |
 | `zubaan draft` | Drafters sharing the extended vocabulary: distilled small model, n-gram | 4 |
 | `zubaan bench` | Benchmarks against running servers with tokenizer-fair metrics | 5 |
@@ -33,6 +33,7 @@ Goal of the project for its author: a public, credible demonstration of skill in
 uv sync --group dev                 # core + dev tools
 uv sync --group dev --extra audit   # add transformers/tokenizers/datasets/torch for real audits
 uv sync --group dev --extra audit --extra report   # plus matplotlib for zubaan report tax
+uv sync --group dev --extra audit --extra report --extra export   # plus what llama.cpp's converter imports
 uv run pytest                       # fast tests (slow and gpu markers skipped by default)
 uv run pytest -m slow               # tests that download models or data
 uv run ruff check . && uv run ruff format .
@@ -51,19 +52,22 @@ src/zubaan/
   io.py         file helpers
   text/         Urdu normalization and word splitting
   audit/        stage 1: fertility.py, acceptance.py
-  extend/       stage 2: tokenizer_info.py, train_bpe.py, selection.py, merge.py, sweep.py
-                (done); init_emb.py (planned)
-  export/       stage 2+: gguf.py, vllm.py, ollama.py (planned)
+  extend/       stage 2: tokenizer_info.py, train_bpe.py, selection.py, merge.py, sweep.py,
+                init_emb.py, focus.py, quality_run.py, build.py (save and verify the model),
+                pipeline.py (extend run)
+  export/       stage 2: gguf.py (llama.cpp commands, fingerprint), parity.py (HF vs llama.cpp ids),
+                ollama.py, vllm.py, pipeline.py (export all)
   adapt/        stage 3: cpt.py (planned)
   draft/        stage 4: distill.py, ngram.py (planned)
   bench/        stage 5: runner.py, quality.py (planned)
-  report/       charts.py, tax.py: Markdown report with PNG charts
+  report/       charts.py, tax.py, extension.py: Markdown reports with PNG charts
   data/         flores.py: FLORES download; urdu.py: Urdu Wikipedia training corpus
-tests/          pytest; fixtures/ holds tiny text samples
+tests/          pytest; fixtures/ holds tiny text samples; conftest.py has a fake llama.cpp folder
+tools/          llama.cpp release b12477 (converter and binaries), gitignored
 configs/        example YAML run configs
 notebooks/      Kaggle notebooks for GPU steps; they pip install this package and call it
 docs/           MkDocs site; roadmap.md and decisions.md are the source of truth for plans
-data/, outputs/, reports/   local artifacts, gitignored
+data/, outputs/, reports/, tools/   local artifacts, gitignored
 ```
 
 ## Architecture rules
@@ -82,7 +86,7 @@ data/, outputs/, reports/   local artifacts, gitignored
 - **Extend tokenizers with real BPE merges, not `added_tokens`.** Keep the base model's pre-tokenizer unchanged.
 - **After extension, English tokenization must be byte-for-byte identical to the base** and Urdu must round-trip (`decode(encode(x)) == x`). Both are tested.
 - **Drafter and target must share the exact same vocabulary.** A drafter for an extended model must use the extended tokenizer.
-- **GGUF export must prove tokenizer parity**: tokenize a test set with Hugging Face and llama.cpp and assert identical ids. Expect `BPE pre-tokenizer was not recognized` from `convert_hf_to_gguf.py` for extended tokenizers; the fix is mapping the fingerprint to the base model's pre-tokenizer type, which is only valid because the pre-tokenizer is unchanged.
+- **GGUF export must prove tokenizer parity**: tokenize a test set with Hugging Face and llama.cpp and assert identical ids; the export stops before quantizing if one differs. The converter picks the pre-tokenizer type from a fingerprint of the tokenizer. On llama.cpp `b12477` the extended Qwen3 tokenizer has the same fingerprint as the base (the converter's test string has no Arabic-script characters), so it is recognized as `qwen2` without a patch. If a tokenizer or release is not recognized, `export/gguf.py` maps the fingerprint to the base model's type, which is only valid because the pre-tokenizer is unchanged (it asserts that first). The parity test, not the absence of a warning, is the proof.
 - **Calibrate quantization (imatrix) on target-language text**, not generic English.
 - **Report quality next to speed** (bits per character, Belebele Urdu). A speedup with a hidden quality drop is not a result.
 
