@@ -28,6 +28,10 @@ report_app = typer.Typer(help="Build reports from saved results.", no_args_is_he
 app.add_typer(report_app, name="report")
 extend_app = typer.Typer(help="Stage 2: extend a tokenizer with Urdu merges.", no_args_is_help=True)
 app.add_typer(extend_app, name="extend")
+export_app = typer.Typer(
+    help="Stage 2: export an extended model to GGUF, Ollama and vLLM.", no_args_is_help=True
+)
+app.add_typer(export_app, name="export")
 
 console = Console()
 
@@ -274,6 +278,33 @@ def report_tax(
     if not acceptance.exists():
         console.print(f"[yellow]{acceptance} not found; the acceptance section is left empty.[/]")
     path = build_report(compare, acceptance, out, target_model)
+    console.print(f"Wrote {path}")
+
+
+@report_app.command("extend")
+def report_extend(
+    sweep: Annotated[Path, typer.Option(help="Output of extend sweep")] = Path(
+        "reports/extend_sweep.json"
+    ),
+    quality: Annotated[Path, typer.Option(help="Output of extend quality")] = Path(
+        "reports/extend_quality_qwen3-1.7b.json"
+    ),
+    export_summary: Annotated[Path, typer.Option(help="export_summary.json from export")] = Path(
+        "outputs/qwen3-1.7b/export/export_summary.json"
+    ),
+    out: Annotated[Path, typer.Option(help="Report directory")] = Path(
+        "docs/reports/tokenizer-extension"
+    ),
+) -> None:
+    """Write the tokenizer extension report: cost, quality and GGUF parity (Markdown + PNGs)."""
+    from zubaan.report.extension import build_extension_report
+
+    if not export_summary.exists():
+        console.print(f"[yellow]{export_summary} not found; the export section is left out.[/]")
+    try:
+        path = build_extension_report(sweep, quality, out, export_summary)
+    except ValueError as e:
+        raise typer.BadParameter(str(e)) from e
     console.print(f"Wrote {path}")
 
 
@@ -618,6 +649,50 @@ def extend_quality(
     console.print(f"Saved {output}")
 
 
+@extend_app.command("run")
+def extend_run(
+    config: Annotated[Path, typer.Option("--config", exists=True, help="YAML with extend:")],
+    base_model: Annotated[
+        Optional[str],  # noqa: UP045
+        typer.Option(help="Override extend.base_model (HF repo id or local folder)"),
+    ] = None,
+    n_new: Annotated[
+        Optional[int],  # noqa: UP045
+        typer.Option(help="Override extend.n_new_tokens"),
+    ] = None,
+    method: Annotated[
+        Optional[str],  # noqa: UP045
+        typer.Option(help="Override extend.init_method: mean | focus | random"),
+    ] = None,
+    relearn: Annotated[
+        bool, typer.Option(help="Learn merges again even if the file exists")
+    ] = False,
+    json_out: Annotated[bool, typer.Option("--json", help="Print the summary as JSON")] = False,
+) -> None:
+    """Learn merges, extend the model, save it to <output_dir>/model and verify it.
+
+    Needs the model weights. The new rows are initialized, not trained (stage 3 trains them).
+    """
+    from zubaan.extend.pipeline import run_extend
+
+    cfg = _extend_config(config, base_model)
+    summary = run_extend(
+        cfg, n_new, method, relearn, log=(lambda s: None) if json_out else console.print
+    )
+    if json_out:
+        typer.echo(json.dumps(summary, indent=2, ensure_ascii=False))
+        return
+    cost = summary["cost"]
+    console.print(
+        f"Urdu cost {cost['cost_multiplier']:.2f}x English "
+        f"({cost['urdu_tokens_per_word']:.2f} tokens per word). "
+        f"English changed: {cost['english_different']}. Round-trip failures: "
+        f"{cost['urdu_roundtrip_failures']}."
+    )
+    console.print(f"Saved the extended model to {summary['model_dir']}")
+    console.print("The new rows are untrained: expect worse Urdu quality until stage 3.")
+
+
 @extend_app.command("sweep")
 def extend_sweep(
     config: Annotated[Path, typer.Option("--config", exists=True, help="YAML with extend:")],
@@ -686,10 +761,65 @@ def draft() -> None:
     _planned(4, "draft model distillation and n-gram drafter")
 
 
-@app.command()
-def export() -> None:
-    """Export to GGUF, vLLM and Ollama with tokenizer parity checks."""
-    _planned(2, "GGUF export with parity check")
+def _export_config(config: Path, model_dir: Path | None):
+    cfg = _section(config, "export")
+    if model_dir:
+        cfg = cfg.model_copy(update={"model_dir": model_dir})
+    return cfg
+
+
+def _run_export_steps(config: Path, model_dir: Path | None, steps: tuple[str, ...], json_out: bool):
+    from zubaan.export.pipeline import run_export
+
+    cfg = _export_config(config, model_dir)
+    try:
+        summary = run_export(cfg, steps, log=(lambda s: None) if json_out else console.print)
+    except (FileNotFoundError, ValueError) as e:
+        raise typer.BadParameter(str(e)) from e
+    if json_out:
+        typer.echo(json.dumps(summary, indent=2, ensure_ascii=False))
+    else:
+        console.print(f"Saved {cfg.output_dir / 'export_summary.json'}")
+
+
+_EXPORT_CONFIG = Annotated[Path, typer.Option("--config", exists=True, help="YAML with export:")]
+_EXPORT_MODEL = Annotated[
+    Optional[Path],  # noqa: UP045
+    typer.Option(help="Override export.model_dir"),
+]
+_EXPORT_JSON = Annotated[bool, typer.Option("--json", help="Print the summary as JSON")]
+
+
+@export_app.command("gguf")
+def export_gguf(
+    config: _EXPORT_CONFIG, model_dir: _EXPORT_MODEL = None, json_out: _EXPORT_JSON = False
+) -> None:
+    """Convert to GGUF, prove tokenizer parity with Hugging Face, then quantize (Urdu imatrix)."""
+    _run_export_steps(config, model_dir, ("gguf",), json_out)
+
+
+@export_app.command("ollama")
+def export_ollama(
+    config: _EXPORT_CONFIG, model_dir: _EXPORT_MODEL = None, json_out: _EXPORT_JSON = False
+) -> None:
+    """Write an Ollama Modelfile for the exported GGUF (run 'export gguf' first)."""
+    _run_export_steps(config, model_dir, ("ollama",), json_out)
+
+
+@export_app.command("vllm")
+def export_vllm(
+    config: _EXPORT_CONFIG, model_dir: _EXPORT_MODEL = None, json_out: _EXPORT_JSON = False
+) -> None:
+    """Write a vLLM config and launch script (dtype half, for T4 and P100)."""
+    _run_export_steps(config, model_dir, ("vllm",), json_out)
+
+
+@export_app.command("all")
+def export_all(
+    config: _EXPORT_CONFIG, model_dir: _EXPORT_MODEL = None, json_out: _EXPORT_JSON = False
+) -> None:
+    """GGUF with parity check, Ollama Modelfile and vLLM config in one go."""
+    _run_export_steps(config, model_dir, ("gguf", "ollama", "vllm"), json_out)
 
 
 @app.command()

@@ -96,7 +96,49 @@ class ExtendConfig(BaseModel):
     seed: int = 0
     quality_output: Path = Path("reports/extend_quality.json")
     init_method: str = Field(default="mean", description="mean | focus | random")
-    output_dir: Path = Path("outputs/extended")
+    output_dir: Path = Field(
+        default=Path("outputs/extend"),
+        description="Tokenizer goes to <output_dir>/tokenizer, the model to <output_dir>/model",
+    )
+    model_dtype: str = Field(
+        default="bfloat16", description="dtype of the saved model (Qwen3's own dtype)"
+    )
+
+
+class ExportConfig(BaseModel):
+    """Export an extended model: GGUF (with a tokenizer parity check), Ollama, vLLM."""
+
+    model_dir: Path = Field(
+        default=Path("outputs/extend/model"), description="Folder written by 'zubaan extend build'"
+    )
+    base_model: str = Field(
+        default="Qwen/Qwen3-1.7B", description="The model that was extended (tokenizer reference)"
+    )
+    output_dir: Path = Path("outputs/export")
+    name: str = Field(default="qwen3-urdu", description="Prefix of the exported file names")
+    llama_cpp_dir: Path = Field(
+        default=Path("tools/llama.cpp-b12477"), description="llama.cpp checkout (converter script)"
+    )
+    llama_cpp_bin: Path | None = Field(
+        default=None, description="Folder with llama-quantize and friends (default: <dir>/bin)"
+    )
+    python: str | None = Field(default=None, description="Python used to run the converter")
+    outtype: str = "f16"
+    quants: list[str] = Field(default=["Q4_K_M", "Q8_0"])
+    calibration: Path = Field(
+        default=Path("data/urdu/urdu_train.txt"),
+        description="Urdu text for the importance matrix (never generic English)",
+    )
+    calibration_chars: int = 200_000
+    imatrix_chunks: int = 40
+    imatrix_ctx: int = 512
+    threads: int | None = None
+    parity_urdu: Path = Path("data/flores_urd.txt")
+    parity_english: Path = Path("data/flores_eng.txt")
+    max_parity_texts: int | None = Field(default=None, description="Per language (None = all)")
+    parity_workers: int = 4
+    max_model_len: int = 4096
+    force: bool = Field(default=False, description="Rebuild files that already exist")
 
 
 class AdaptConfig(BaseModel):
@@ -117,6 +159,7 @@ class ProjectConfig(BaseModel):
     acceptance: AcceptanceConfig | None = None
     urdu_corpus: UrduCorpusConfig | None = None
     extend: ExtendConfig | None = None
+    export: ExportConfig | None = None
     adapt: AdaptConfig | None = None
 
 
