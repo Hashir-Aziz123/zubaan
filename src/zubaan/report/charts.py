@@ -144,3 +144,85 @@ def acceptance_chart(
     _style(ax)
     ax.set_title(title, loc="left", fontsize=11)
     return _save(fig, path)
+
+
+# Slots 3, 7 and 5 of the validated categorical palette: aqua, violet, magenta. They stay
+# apart under colour-vision simulation (worst adjacent pair: Delta E 19.9). Aqua and magenta
+# are below 3:1 against the surface, so every bar carries a visible value label.
+METHOD_COLORS = {"mean": "#1baf7a", "focus": "#6250d6", "random": "#e87ba4"}
+METHOD_LABELS = {
+    "mean": "Mean of pieces",
+    "focus": "FOCUS-style",
+    "random": "Random (control)",
+}
+
+
+def extension_cost_chart(rows: list[dict], path: Path) -> Path:
+    """Urdu tokens per word against the number of new tokens, with English as the floor."""
+    plt = _plt()
+    xs = [r["n_new_tokens"] for r in rows]
+    urdu = [r["urdu_tokens_per_word"] for r in rows]
+    english = rows[0]["english_tokens_per_word"]
+    fig, ax = plt.subplots(figsize=(7.5, 3.6))
+    ax.plot(xs, urdu, color=TARGET_COLOR, linewidth=2, marker="o", markersize=7)
+    for x, y in zip(xs, urdu, strict=True):
+        ax.annotate(
+            f"{y:.2f}", (x, y), textcoords="offset points", xytext=(0, 9), ha="center",
+            fontsize=8, color=TEXT_SECONDARY,
+        )  # fmt: skip
+    ax.axhline(english, color=REFERENCE_COLOR, linewidth=2)
+    ax.text(xs[0], english + 0.12, f"English, {english:.2f}", ha="left", fontsize=8,
+            color=TEXT_SECONDARY)  # fmt: skip
+    ax.text(xs[0] + 900, urdu[0], "Urdu", ha="left", va="center", fontsize=8,
+            color=TEXT_SECONDARY)  # fmt: skip
+    ax.set_xticks(xs, [f"{x:,}" for x in xs])
+    ax.set_xlabel("New Urdu tokens added to the vocabulary")
+    ax.set_ylabel("Tokens per word (lower is cheaper)")
+    ax.set_ylim(0, max(urdu) * 1.2)
+    ax.yaxis.grid(True, color=GRID, linewidth=0.8)
+    ax.xaxis.grid(False)
+    for side in ("top", "right", "left"):
+        ax.spines[side].set_visible(False)
+    ax.tick_params(axis="y", length=0)
+    ax.set_axisbelow(True)
+    ax.set_title("Token cost of Urdu falls fast, then flattens", loc="left", fontsize=11)
+    return _save(fig, path)
+
+
+def extension_quality_chart(
+    variants: dict, path: Path, set_name: str = "urdu_heldout", set_label: str = "held-out Urdu"
+) -> Path:
+    """Bits per character per variant: one group per size, one bar per init method."""
+    plt = _plt()
+    sizes = sorted({v["n_new_tokens"] for v in variants.values() if v["n_new_tokens"]})
+    methods = [m for m in METHOD_COLORS if any(v["method"] == m for v in variants.values())]
+    fig, ax = plt.subplots(figsize=(7.5, 0.5 * len(sizes) * len(methods) + 1.6))
+    height, y = 0.22, 0.0
+    ticks, tick_labels = [], []
+    for n in sizes:
+        start = y
+        for m in methods:
+            v = variants.get(f"n{n}-{m}")
+            if v is None:
+                continue
+            bpc = v["bpc"][set_name]["bits_per_character"]
+            ax.barh(y, bpc, height=height - 0.03, color=METHOD_COLORS[m],
+                    label=METHOD_LABELS[m] if n == sizes[0] else None)  # fmt: skip
+            ax.text(bpc + 0.05, y, f"{bpc:.2f}", va="center", fontsize=8, color=TEXT_SECONDARY)
+            y -= height
+        ticks.append((start + y + height) / 2)
+        tick_labels.append(f"{n:,} new tokens")
+        y -= 0.25
+    base = variants.get("base")
+    if base:
+        b = base["bpc"][set_name]["bits_per_character"]
+        ax.axvline(b, color=TEXT_SECONDARY, linewidth=1, linestyle="--")
+        ax.text(b + 0.05, 0.2, f"base model, {b:.2f}", fontsize=8, color=TEXT_SECONDARY)
+    ax.set_yticks(ticks, tick_labels)
+    ax.set_xlabel(f"Bits per character on {set_label} (lower is better)")
+    ax.set_xlim(0, max(v["bpc"][set_name]["bits_per_character"] for v in variants.values()) * 1.15)
+    ax.set_ylim(y + 0.1, 0.32)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.2), ncol=3, frameon=False)
+    _style(ax)
+    ax.set_title("Untrained new tokens hurt Urdu quality", loc="left", fontsize=11)
+    return _save(fig, path)
