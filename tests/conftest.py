@@ -131,3 +131,38 @@ def make_tiny_qwen3(rows: int, tie: bool = True, seed: int = 0, dtype: str = "fl
 @pytest.fixture
 def tiny_qwen3():
     return make_tiny_qwen3
+
+
+# Fake llama.cpp pieces shared by the export tests ------------------------------
+H_BASE = "a" * 64
+H_OTHER = "b" * 64
+H_EXT = "c" * 64
+
+FAKE_SOURCE = f'''
+class Model:
+    def get_vocab_base_pre(self, tokenizer) -> str:
+        chktxt = 'abc\\n \\'quoted\\' ق'
+        chktok = tokenizer.encode(chktxt)
+        res = None
+        if chkhsh == "{H_BASE}":
+            # ref: https://example.com/base
+            res = "qwen2"
+        if chkhsh == "{H_OTHER}":
+            # ref: https://example.com/other
+            # second comment line
+            res = "llama-bpe"
+
+        if res is None:
+            raise NotImplementedError("BPE pre-tokenizer was not recognized")
+        return res
+'''
+
+
+def make_llama_dir(tmp_path: Path, source: str = FAKE_SOURCE) -> Path:
+    """A fake llama.cpp folder: converter source and empty tool files."""
+    root = tmp_path / "llama.cpp"
+    (root / "bin").mkdir(parents=True)
+    (root / "convert_hf_to_gguf.py").write_text(source, encoding="utf-8")
+    for tool in ("llama-quantize", "llama-imatrix", "llama-tokenize"):
+        (root / "bin" / f"{tool}.exe").write_text("", encoding="utf-8")
+    return root
