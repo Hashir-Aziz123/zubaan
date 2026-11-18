@@ -830,12 +830,26 @@ def adapt_merge(
         Optional[Path],  # noqa: UP045
         typer.Option(help="Where to save the merged model (default <output_dir>/model)"),
     ] = None,
+    milestone: Annotated[
+        Optional[int],  # noqa: UP045
+        typer.Option(help="Merge the Hub milestone saved at this step instead of the newest"),
+    ] = None,
     json_out: Annotated[bool, typer.Option("--json", help="Print the summary as JSON")] = False,
 ) -> None:
     """Merge LoRA and the trained rows into a plain model, save it and verify the folder."""
     from zubaan.adapt.finalize import merge_and_save
 
     cfg = _adapt_config(config, model_path)
+    if milestone is not None:
+        if checkpoint is not None or not cfg.hub_repo:
+            raise typer.BadParameter("--milestone needs hub_repo in the config and no --checkpoint")
+        from zubaan.adapt.pipeline import download_hub_checkpoint, milestone_path
+
+        checkpoint = download_hub_checkpoint(
+            cfg.hub_repo, cfg.output_dir / "checkpoints", milestone_path(milestone)
+        )
+        if checkpoint is None:
+            raise typer.BadParameter(f"no milestone at step {milestone} in {cfg.hub_repo}")
     summary = merge_and_save(
         cfg, checkpoint, out, log=(lambda s: None) if json_out else console.print
     )

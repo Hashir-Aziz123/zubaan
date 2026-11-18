@@ -188,7 +188,15 @@ def _run_config_cell(notebook5, tmp_path, monkeypatch, mode, hub):
     monkeypatch.chdir(tmp_path)
     work = tmp_path / "work"
     work.mkdir(exist_ok=True)
-    env = {"MODE": mode, "HUB_REPO": hub, "MICRO_BATCH": 2, "MODEL_DIR": Path("/kaggle/input/m")}
+    env = {
+        "MODE": mode,
+        "HUB_REPO": hub,
+        "MICRO_BATCH": 2,
+        "GRAD_CHECKPOINT": True,
+        "PHASE_A_STEPS": 100,
+        "PHASE_B_STEPS": 700,
+        "MODEL_DIR": Path("/kaggle/input/m"),
+    }
     cell = cell.replace('Path("/kaggle/working")', f"Path({str(work)!r})")
     exec(compile(cell, "config cell", "exec"), env)
     return load_config(tmp_path / "adapt.yaml")
@@ -198,9 +206,10 @@ def test_notebook5_main_config_matches_the_decisions(notebook5, tmp_path, monkey
     cfg = _run_config_cell(notebook5, tmp_path, monkeypatch, "main", "me/ckpt")
     a = cfg.adapt
     assert (a.lora_rank, a.lora_alpha, a.precision, a.device) == (64, 128, "fp16", "cuda")
-    assert (a.phase_a_steps, a.phase_b_steps, a.grad_accum) == (150, 800, 16)
+    assert (a.phase_a_steps, a.phase_b_steps, a.grad_accum) == (100, 700, 16)
     assert a.english_replay_ratio == 0.1 and a.block_size == 1024
     assert a.hub_repo == "me/ckpt" and a.hub_private is True
+    assert (a.checkpoint_every, a.milestone_every, a.gradient_checkpointing) == (50, 200, True)
     assert a.output_dir.name == "adapted"
     assert cfg.urdu_corpus is not None  # 'zubaan data urdu --config adapt.yaml' needs this section
 
@@ -211,6 +220,7 @@ def test_notebook5_smoke_never_shares_a_hub_repo_with_the_main_run(
     smoke = _run_config_cell(notebook5, tmp_path, monkeypatch, "smoke", "me/ckpt").adapt
     assert smoke.hub_repo == "me/ckpt-smoke" and smoke.output_dir.name == "adapt_smoke"
     assert smoke.phase_a_steps + smoke.phase_b_steps == 30 and smoke.checkpoint_every == 10
+    assert smoke.milestone_every == 10
     assert _run_config_cell(notebook5, tmp_path, monkeypatch, "smoke", "").adapt.hub_repo is None
 
 
@@ -244,3 +254,75 @@ def test_notebook5_check_reads_the_log_file_not_a_key_run_adapt_does_not_return(
     cell = next(c for c in code_cells(notebook5) if "5 fp16 steps" in c)
     assert "train_log.jsonl" in cell and 'res["history"]' not in cell
     from zubaan.adapt.pipeline import run_adapt  # noqa: F401  (the cell imports it)
+
+
+def test_notebook5_micro_batch_and_checkpointing_settings_reach_the_config(
+    notebook5, tmp_path, monkeypatch
+):
+    cell = next(c for c in code_cells(notebook5) if 'Path("adapt.yaml").write_text' in c)
+    monkeypatch.chdir(tmp_path)
+    work = tmp_path / "work"
+    work.mkdir()
+    env = {
+        "MODE": "main",
+        "HUB_REPO": "",
+        "MICRO_BATCH": 1,
+        "GRAD_CHECKPOINT": False,
+        "PHASE_A_STEPS": 50,
+        "PHASE_B_STEPS": 300,
+        "MODEL_DIR": Path("/kaggle/input/m"),
+    }
+    exec(compile(cell.replace('Path("/kaggle/working")', f"Path({str(work)!r})"), "c", "exec"), env)
+    a = load_config(tmp_path / "adapt.yaml").adapt
+    assert (a.micro_batch_size, a.grad_accum, a.gradient_checkpointing) == (1, 32, False)
+    assert a.phase_a_steps + a.phase_b_steps == 350
+
+
+def test_notebook5_speed_trial_picks_the_fastest_setting_that_fits(
+    notebook5, tmp_path, monkeypatch
+):
+    import json
+    import subprocess
+
+    cell = next(c for c in code_cells(notebook5) if "VARIANTS = [" in c)
+    assert cell.startswith("if MODE == 'speed'")
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "adapt.yaml").write_text(yaml.safe_dump({"adapt": {"model_path": "m"}}))
+    speeds = {(2, True): 600, (1, False): 900, (2, False): 800}
+
+    def fake_run(cmd, capture_output, text):
+        conf = yaml.safe_load(Path(cmd[cmd.index("--config") + 1]).read_text())["adapt"]
+        key = (conf["micro_batch_size"], conf["gradient_checkpointing"])
+        if key not in speeds:  # micro batch 4 with checkpointing: pretend it ran out of memory
+            return subprocess.CompletedProcess(
+                cmd, 1, "", "torch.OutOfMemoryError: CUDA out of memory"
+            )
+        out = Path(conf["output_dir"])
+        out.mkdir(parents=True)
+        rows = [
+            {
+                "step": i,
+                "phase": "A" if i <= 2 else "B",
+                "loss": 5.0,
+                "grad_norm": 1.0,
+                "tokens_per_s": speeds[key],
+                "gpu_mem_gb": 7.0 + key[0],
+            }
+            for i in range(1, 9)
+        ]
+        (out / "train_log.jsonl").write_text(chr(10).join(json.dumps(r) for r in rows))
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    env = {"MODE": "speed", "WORK": tmp_path, "json": json, "Path": Path, "gpu_name": "T4"}
+    exec(compile(cell, "speed", "exec"), env)
+    report = json.loads((tmp_path / "speed_report.json").read_text())
+    assert report["best"] == "mb1_ckpt_off"
+    failed = next(r for r in report["results"] if r["name"] == "mb4_ckpt_on")
+    assert not failed["ok"] and failed["why"] == "out of GPU memory"
+
+
+def test_notebook5_smoke_checks_the_hub_holds_the_newest_and_the_milestone_copies(notebook5):
+    cell = next(c for c in code_cells(notebook5) if "max_steps=20" in c)
+    assert "milestones/step-0000010/meta.json" in cell and "last/meta.json" in cell
+    assert '"milestones"' in cell  # an old smoke run's copies are cleared first

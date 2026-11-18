@@ -105,8 +105,26 @@ def run_prepare(cfg: AdaptConfig, log: Callable[[str], None] = print) -> dict:
     return meta
 
 
-def make_hub_uploader(repo_id: str, private: bool = True) -> Callable[[Path, int], None]:
+MILESTONE_DIR = "milestones"
+
+
+def milestone_path(step: int) -> str:
+    """Folder name inside the Hub repo for the permanent copy of a checkpoint."""
+    return f"{MILESTONE_DIR}/step-{step:07d}"
+
+
+def make_hub_uploader(
+    repo_id: str,
+    private: bool = True,
+    milestone_every: int = 0,
+    log: Callable[[str], None] = print,
+) -> Callable[[Path, int], None]:
     """Upload a checkpoint folder to ``<repo>/last`` in a private Hub repo.
+
+    Every ``milestone_every`` steps the same folder is also copied to
+    ``<repo>/milestones/step-NNNNNNN`` and kept, so any of them can be merged later.
+    A failed upload is reported loudly but does not stop the run: the local checkpoint is
+    still there and the next upload retries.
 
     Uses the token from the environment (``HF_TOKEN``) or a cached login. Only called when
     ``hub_repo`` is configured; nothing is ever pushed otherwise.
@@ -117,19 +135,32 @@ def make_hub_uploader(repo_id: str, private: bool = True) -> Callable[[Path, int
     api.create_repo(repo_id, private=private, exist_ok=True)
 
     def upload(path: Path, step: int) -> None:
-        api.upload_folder(
-            folder_path=str(path),
-            repo_id=repo_id,
-            path_in_repo="last",
-            delete_patterns="*",
-            commit_message=f"checkpoint step {step}",
-        )
+        try:
+            api.upload_folder(
+                folder_path=str(path),
+                repo_id=repo_id,
+                path_in_repo="last",
+                delete_patterns="*",
+                commit_message=f"checkpoint step {step}",
+            )
+            if milestone_every and step % milestone_every == 0:
+                api.upload_folder(
+                    folder_path=str(path),
+                    repo_id=repo_id,
+                    path_in_repo=milestone_path(step),
+                    commit_message=f"milestone step {step}",
+                )
+        except Exception as e:  # keep training; the local checkpoint exists
+            log(f"WARNING: Hub upload at step {step} failed ({type(e).__name__}: {e}). Continuing.")
 
     return upload
 
 
-def download_hub_checkpoint(repo_id: str, directory: Path) -> Path | None:
-    """Fetch ``<repo>/last`` into ``directory`` as a ``ckpt-<step>`` folder, or None if absent."""
+def download_hub_checkpoint(repo_id: str, directory: Path, folder: str = "last") -> Path | None:
+    """Fetch ``<repo>/<folder>`` into ``directory`` as a ``ckpt-<step>`` folder, or None if absent.
+
+    ``folder`` is ``last`` (the newest checkpoint) or ``milestone_path(step)``.
+    """
     import shutil
 
     from huggingface_hub import snapshot_download
@@ -139,10 +170,10 @@ def download_hub_checkpoint(repo_id: str, directory: Path) -> Path | None:
 
     tmp = directory / ".hub-download"
     try:
-        snapshot_download(repo_id, allow_patterns="last/*", local_dir=str(tmp))
+        snapshot_download(repo_id, allow_patterns=f"{folder}/*", local_dir=str(tmp))
     except HfHubHTTPError:
         return None
-    last = tmp / "last"
+    last = tmp / folder
     if not (last / "meta.json").exists():
         return None
     step = json.loads((last / "meta.json").read_text(encoding="utf-8"))["step"]
@@ -289,7 +320,7 @@ def run_adapt(
 
     ckpt_dir = cfg.output_dir / "checkpoints"
     if uploader is None and cfg.hub_repo:
-        uploader = make_hub_uploader(cfg.hub_repo, cfg.hub_private)
+        uploader = make_hub_uploader(cfg.hub_repo, cfg.hub_private, cfg.milestone_every, log)
     if downloader is None and cfg.hub_repo:
 
         def downloader(directory: Path) -> Path | None:

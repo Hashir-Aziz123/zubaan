@@ -201,6 +201,10 @@ class AdaptConfig(BaseModel):
     eval_max_chars: int = 400
     checkpoint_every: int = 100
     keep_checkpoints: int = 2
+    milestone_every: int = Field(
+        default=0,
+        description="Also keep a permanent copy of every Nth checkpoint on the Hub (0 = off)",
+    )
     resume: bool = True
     hub_repo: str | None = Field(
         default=None, description="Private Hub repo for checkpoints, e.g. user/zubaan-qwen3-ckpt"

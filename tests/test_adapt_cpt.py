@@ -2,6 +2,7 @@
 
 import json
 import shutil
+from pathlib import Path
 
 import pytest
 import yaml
@@ -338,3 +339,47 @@ def test_resume_refuses_a_checkpoint_from_a_different_schedule(world):
     # Fields that do not affect the run (logging, checkpoint cadence) may change.
     again = cfg.model_copy(update={"log_every": 5, "checkpoint_every": 3})
     assert run_adapt(again, log=lambda s: None, max_steps=2)["resumed_from_step"] == 4
+
+
+def test_milestone_path_and_hub_uploader_keep_permanent_copies(monkeypatch):
+    import sys
+    import types
+
+    from zubaan.adapt.pipeline import make_hub_uploader, milestone_path
+
+    assert milestone_path(200) == "milestones/step-0000200"
+    calls = []
+
+    class FakeApi:
+        def create_repo(self, *a, **k):
+            pass
+
+        def upload_folder(self, **k):
+            calls.append(k["path_in_repo"])
+            if k.get("fail"):
+                raise RuntimeError
+
+    monkeypatch.setitem(sys.modules, "huggingface_hub", types.SimpleNamespace(HfApi=FakeApi))
+    up = make_hub_uploader("me/r", True, 200)
+    up(Path("x"), 150)
+    up(Path("x"), 200)
+    assert calls == ["last", "last", "milestones/step-0000200"]
+
+
+def test_a_failed_hub_upload_warns_and_does_not_stop_training(monkeypatch):
+    import sys
+    import types
+
+    from zubaan.adapt.pipeline import make_hub_uploader
+
+    class BrokenApi:
+        def create_repo(self, *a, **k):
+            pass
+
+        def upload_folder(self, **k):
+            raise ConnectionError("offline")
+
+    monkeypatch.setitem(sys.modules, "huggingface_hub", types.SimpleNamespace(HfApi=BrokenApi))
+    messages = []
+    make_hub_uploader("me/r", True, 0, messages.append)(Path("x"), 50)
+    assert len(messages) == 1 and "WARNING" in messages[0] and "step 50" in messages[0]
