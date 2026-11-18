@@ -30,12 +30,12 @@ audit = [
     # Model forward passes for audit acceptance. CPU build on Windows by default.
     "torch>=2.3",
 ]
-# Stages 2 to 4: extension, continued pretraining, drafter training. Usually installed on Kaggle.
+# Stages 3 and 4: continued pretraining, drafter training. Usually installed on Kaggle.
+# trl is not used: raw-text pretraining runs on our own small loop (docs/decisions.md, 2026-11-18).
 train = [
     "zubaan[audit]",
     "torch>=2.3",
     "peft>=0.12",
-    "trl>=0.12",
     "accelerate>=0.34",
 ]
 # Stage 2: llama.cpp's convert_hf_to_gguf.py imports these (gguf-py itself ships with the

@@ -32,6 +32,10 @@ export_app = typer.Typer(
     help="Stage 2: export an extended model to GGUF, Ollama and vLLM.", no_args_is_help=True
 )
 app.add_typer(export_app, name="export")
+adapt_app = typer.Typer(
+    help="Stage 3: continued pretraining so the model learns its new tokens.", no_args_is_help=True
+)
+app.add_typer(adapt_app, name="adapt")
 
 console = Console()
 
@@ -749,10 +753,66 @@ def extend_sweep(
     console.print(f"Saved {out}")
 
 
-@app.command()
-def adapt() -> None:
-    """Continued pretraining so the model learns its new tokens."""
-    _planned(3, "continued pretraining recipe")
+def _adapt_config(config: Path, model_path: Path | None):
+    cfg = _section(config, "adapt")
+    if model_path:
+        cfg = cfg.model_copy(update={"model_path": model_path})
+    return cfg
+
+
+@adapt_app.command("prepare")
+def adapt_prepare(
+    config: Annotated[Path, typer.Option("--config", exists=True, help="YAML with adapt:")],
+    model_path: Annotated[
+        Optional[Path],  # noqa: UP045
+        typer.Option(help="Override adapt.model_path (the extended model folder)"),
+    ] = None,
+    json_out: Annotated[bool, typer.Option("--json", help="Print the metadata as JSON")] = False,
+) -> None:
+    """Tokenize Urdu and English replay text into training blocks (no model weights needed).
+
+    Training lines that overlap FLORES or Belebele text are dropped and counted.
+    """
+    from zubaan.adapt.pipeline import run_prepare
+
+    cfg = _adapt_config(config, model_path)
+    meta = run_prepare(cfg, log=(lambda s: None) if json_out else console.print)
+    if json_out:
+        typer.echo(json.dumps(meta, indent=2, ensure_ascii=False))
+        return
+    console.print(f"Saved blocks to {cfg.data_dir}")
+
+
+@adapt_app.command("run")
+def adapt_run(
+    config: Annotated[Path, typer.Option("--config", exists=True, help="YAML with adapt:")],
+    model_path: Annotated[
+        Optional[Path],  # noqa: UP045
+        typer.Option(help="Override adapt.model_path (the extended model folder)"),
+    ] = None,
+    steps: Annotated[
+        Optional[int],  # noqa: UP045
+        typer.Option(help="Stop after this many steps (smoke runs); default is the full schedule"),
+    ] = None,
+    json_out: Annotated[bool, typer.Option("--json", help="Print the summary as JSON")] = False,
+) -> None:
+    """Train the new embedding rows, then LoRA plus the new rows. Needs a GPU for real models.
+
+    Writes checkpoints under <output_dir>/checkpoints, resumes from the newest one (or from the
+    private Hub repo adapt.hub_repo) and logs to <output_dir>/train_log.jsonl.
+    """
+    from zubaan.adapt.pipeline import run_adapt
+
+    cfg = _adapt_config(config, model_path)
+    summary = run_adapt(cfg, log=(lambda s: None) if json_out else console.print, max_steps=steps)
+    if json_out:
+        typer.echo(json.dumps(summary, indent=2, ensure_ascii=False))
+        return
+    done = "finished" if summary["finished"] else "stopped early"
+    console.print(f"Training {done} at step {summary['final_step']} of {summary['total_steps']}.")
+    for e in summary["evals"][-1:]:
+        console.print(f"Last eval: {e['eval']}")
+    console.print("Next: merge LoRA and the new rows, verify, then evaluate (stage 3, chunks 6-7).")
 
 
 @app.command()

@@ -30,7 +30,7 @@ Local `main` is ahead of GitHub. Pushed through `dbff2e8`. Not pushed: `b74aa9e`
 
 # Stage 3 plan: adapt (continued pretraining)
 
-Draft, 2026-11-18. Nothing is built yet. `src/zubaan/adapt/` is empty and `AdaptConfig` in `config.py` only has three fields (`model_path`, `corpus`, `english_replay_ratio`). The `train` extra already lists `peft`, `trl` and `accelerate`.
+Draft, 2026-11-18, decisions settled the same day. See the status list at the end of this section for what is built. The `train` extra lists `peft` and `accelerate` (`trl` was dropped, see decision 10).
 
 **Goal.** Take the extended Qwen3-1.7B (10,000 new tokens, untrained rows) and train it on Urdu text until it uses the new tokens well, without hurting English. The result is the first model that is both cheaper per Urdu word and not worse at Urdu than the base.
 
@@ -56,7 +56,7 @@ We cannot full fine-tune 1.7B parameters on a 16 GB T4 (AdamW needs about 16 byt
 6. **Evaluate with the Stage 2 harness** (`extend/quality_run.py`, `bench/quality.py`): bits per character on held-out Urdu, FLORES Urdu, FLORES English; Belebele `urd_Arab` and `eng_Latn` with `acc_char` and Wilson 95% intervals. Never compare per-token loss across tokenizers.
 7. **Re-export and recheck:** GGUF parity test again, Q4_K_M with the Urdu imatrix, a real Urdu generation sample, a vLLM check.
 
-## Success checks (proposed, confirm in decision 9)
+## Success checks (decision 9)
 
 1. English tokenization still byte-identical and Urdu still round-trips (the tokenizer is not touched, so this must stay true; the verify step re-checks).
 2. Held-out Urdu bits per character clearly below the untrained 3.57. Stretch goal: at or below the base model's 2.31 even though the extended model needs 2.4x fewer tokens.
@@ -64,26 +64,22 @@ We cannot full fine-tune 1.7B parameters on a 16 GB T4 (AdamW needs about 16 byt
 4. Belebele Urdu `acc_char` above the base 33.4%, reported with its interval. With 900 questions the 95% interval is about plus or minus 3 points, so a gain under about 4 points is not distinguishable from noise and must be described that way.
 5. Parity still passes on the final GGUF, and a Q4_K_M answers a simple Urdu prompt in readable Urdu.
 
-## Decisions you need to make
+## Decisions (settled 2026-11-18, full reasoning in `docs/decisions.md`)
 
-Each one has my recommendation. I will use the recommendation if you just say "go with the defaults".
+All recommended defaults were accepted.
 
-1. **Which model do we continue from?** `Qwen/Qwen3-1.7B` is the post-trained chat and thinking model, not `Qwen3-1.7B-Base`. Training it on raw Urdu text will blunt its instruction following and `<think>` behavior.
-   - Option A: continue from the existing extended model (no rework, Stage 2 artifacts, Ollama and vLLM setups all target it).
-   - Option B: rebuild the extension on `Qwen3-1.7B-Base` (about 1 hour CPU notebook, assumes the tokenizer is identical, which we must verify with `same_tokenizer`) and train that.
-   - **Recommend A.** Our metrics (bits per character, Belebele log-likelihood scoring, speed, acceptance) do not need chat ability, and Stage 4 and 5 reuse the current artifacts. State the chat caveat in the report. Revisit B only if instruction following matters for the final demo.
-2. **What is trainable?** Choices: (a) new rows only, (b) new rows plus LoRA, (c) the whole embedding matrix (331M parameters, so Adam state about 4 GB extra) plus LoRA.
-   - **Recommend two phases, A then B as described above**, with old embedding rows frozen. Unfreezing old rows risks English drift and costs memory. The code should freeze old rows by construction (a separate trainable tensor for the new rows) instead of a gradient mask, because a mask still allocates optimizer state for the full matrix and peft's tied-embedding handling is easy to get wrong.
-3. **LoRA shape.** Starting point: rank 64, alpha 128, dropout 0.05, all attention and MLP linear layers; learning rate about 2e-4 for LoRA and higher for the new rows (about 1e-3). These are starting values to check in the smoke run, not tuned numbers. **Recommend these defaults**, adjusted only if the smoke run shows instability.
-4. **Urdu data.** Wikipedia only (about 14M tokens, already clean, FLORES-guarded, licence known) or add a larger source such as CC-100 `ur` (more text, licence terms to check, needs cleaning and the same overlap guard).
-   - **Recommend Wikipedia only first.** One to three epochs over 14M tokens risks mild overfitting, so we watch held-out Urdu bits per character every N steps. Add a bigger source only if that curve is still falling when the data runs out.
-5. **English replay.** Source and share. Default share in `AdaptConfig` is 10%. **Recommend English Wikipedia (same licence family as the Urdu text), 10% of blocks.** Say if you prefer another source.
-6. **Control experiment.** Without it we cannot tell whether gains come from the new tokens or from simply training on more Urdu. The control: base Qwen3-1.7B with the **base** tokenizer, same LoRA recipe, same Urdu lines (it needs about 2.4x more tokens for the same text, so more GPU time).
-   - **Recommend yes, but after the main run and only if GPU hours allow.** It is what makes the result credible. Decide whether to match text (same lines) or compute (same number of tokens); recommend matching text.
-7. **Precision.** T4 has no BF16. Options: fp16 autocast with a gradient scaler (fast, fp16 overflow is a known risk for some Qwen layers) or fp32 base weights (about 7 GB for the model, safer, slower). **Recommend trying fp16 in the smoke run and switching to fp32 only if the loss goes NaN or inf.** Stage 2 evaluation already ran in float32 on a T4 without issue.
-8. **Hugging Face Hub.** Checkpoint resume needs a place to push. `CLAUDE.md` says never push to the Hub without asking. **Please approve, or refuse:** a **private** repo (name of your choice) for checkpoints, with the token stored as a Kaggle secret. Nothing is made public until you decide in Stage 5. If you refuse, resume works only inside one session and a crash loses the run.
-9. **Success thresholds and GPU budget.** Confirm or change the checks above (English at most +0.02 bits per character; Urdu below 3.57 as the must, 2.31 as the stretch). GPU budget: **recommend a cap of about 10 GPU hours for the main run**, set after the smoke run gives real tokens per second. Kaggle gives about 30 hours a week.
-10. **Defaults I will pick unless you object:** block size 1024, one T4, gradient checkpointing on, plain `transformers` training loop instead of `trl` (raw-text pretraining does not need it, and it avoids version conflicts like the `langsfer` one), seed fixed and logged, notebook number 05.
+| # | Decision | Choice |
+| --- | --- | --- |
+| 1 | Starting model | The existing extended `Qwen3-1.7B` (chat model), not `-Base`. Chat and `<think>` ability will degrade and the report says so |
+| 2 | Trainable | Phase A: only the 10,000 new rows. Phase B: add LoRA. Old embedding rows frozen via a separate trainable tensor, not a gradient mask |
+| 3 | Hub | Private repo for checkpoints, token as a Kaggle secret. Still to do by you: create the repo and token. Nothing public |
+| 4 | LoRA (start values) | Rank 64, alpha 128, dropout 0.05, all attention and MLP linears, LR about 2e-4 (LoRA) and 1e-3 (new rows) |
+| 5 | Urdu data | Wikipedia only (about 14M tokens, estimate) |
+| 6 | English replay | English Wikipedia, 10% of blocks |
+| 7 | Control | Base tokenizer, same recipe, matched on compute, after the main run if hours allow |
+| 8 | Precision | fp16 autocast with a gradient scaler, fp32 only if NaN |
+| 9 | Success checks | English bpc at most +0.02 over 1.208; Urdu bpc below 3.57 (must), 2.31 (stretch); Belebele Urdu above 33.4% with interval; cap about 10 GPU hours |
+| 10 | Defaults | Block size 1024, one T4, gradient checkpointing, own training loop (no `trl`), notebook 05 |
 
 ## Chunks
 
@@ -133,6 +129,16 @@ Each chunk has one deliverable, a test that can fail, and a done criterion. "Lap
 ### Chunk 9: Write-up
 - `docs/stage3-usage.md`, decisions appended to `docs/decisions.md` with date and reason, roadmap and the stage table in `CLAUDE.md` updated, limitations stated (small run, noisy Belebele, chat ability).
 
+## Status
+
+- [x] Decisions settled and baked into `docs/decisions.md`, `docs/roadmap.md`, `CLAUDE.md` (2026-11-18)
+- [x] Chunk 1: `adapt/data.py` (blocks, mixing, contamination guard, English replay), `zubaan adapt prepare`
+- [x] Chunk 2: `adapt/params.py` (new rows as their own tensor, LoRA, phases, merge)
+- [x] Chunk 3: `adapt/cpt.py`, `adapt/pipeline.py`, `AdaptConfig`, `zubaan adapt run`, `configs/adapt-qwen3-1.7b.yaml`. 40 new tests, all CPU, tiny random model; exact-resume test passes
+- [x] Real corpus prepared locally in 2 minutes: 16.05M Urdu tokens, 15,677 blocks, 2,613 English blocks, 47 Urdu lines dropped by the wider guard. One epoch is 544 steps, so the default 950 steps is about 1.75 epochs. `data/adapt/` is gitignored; Kaggle needs to rerun `adapt prepare` or take it as a dataset
+- [ ] Chunk 0 and chunk 4: Kaggle environment check and smoke run, `notebooks/05_adapt_qwen3.ipynb` (not written yet). You still need the private Hub repo and token (decision 3)
+- [ ] Chunk 5 main run; chunk 6 merge, save and verify (`merge_lora` and `merge_new_rows` exist, the folder writer does not); chunk 7 evaluation; chunk 8 re-export; chunk 9 write-up
+
 ## Order
 
 ```
@@ -159,7 +165,7 @@ Stage 4 (drafters sharing the extended vocabulary, distilled from the adapted ta
 
 ## Notes for Claude
 
-- First action next session: ask the user the decisions above (or get "go with the defaults"), then start at chunk 0. Do not write training code before decisions 1, 2 and 8 are answered.
+- Decisions are settled (table above). Continue from the first unchecked item in the status list.
 - Read `CLAUDE.md`, `docs/roadmap.md` and `docs/decisions.md` first. Record each design decision in `docs/decisions.md` with date and reason.
 - `uv sync --group dev --extra audit --extra report --extra export` before working (add `--extra train` for Stage 3 code); `uv run pytest` and `uv run ruff check .` before saying a task is done. Do not run `ruff format .` on notebooks.
 - Never load real models in default tests. Never push to Hugging Face or PyPI without asking.

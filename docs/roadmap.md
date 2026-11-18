@@ -38,9 +38,15 @@ Each stage ends with something usable and public. Estimates assume part-time wor
 
 ## Stage 3: adapt (2 to 3 weeks)
 
-- [ ] Continued pretraining recipe: LoRA plus trainable embeddings and LM head, English replay
-- [ ] Kaggle notebook with Hub checkpointing and resume
-- [ ] Quality: bits per character on held-out Urdu, Belebele `urd_Arab`
+Plan and decisions: `continue.md` and `docs/decisions.md` (2026-11-18). Start from the extended Qwen3-1.7B, train the 10,000 new rows then LoRA, Urdu Wikipedia plus 10% English Wikipedia, fp16 on a Kaggle T4, private Hub checkpoints.
+
+- [ ] Environment check: versions that install together, 5-step fp16 LoRA step without NaN on a T4 (chunk 0)
+- [x] Training data: pack Urdu and English replay into token blocks, FLORES (dev and devtest) and Belebele overlap guard (`adapt/data.py`, `zubaan adapt prepare`, chunk 1). Real corpus: 16.05M Urdu tokens in 15,677 blocks (more than the 14M estimate), 2,613 English blocks, 47 Urdu lines dropped by the wider guard
+- [x] Trainable parameters: new rows as their own tensor, LoRA, tied head, merge (`adapt/params.py`, chunk 2)
+- [x] Training loop with phases, fp16, NaN guard, checkpoint and resume, `zubaan adapt prepare|run` (`adapt/cpt.py`, `adapt/pipeline.py`, chunk 3); exact-resume test on a tiny model passes
+- [ ] Kaggle smoke run (20 to 50 steps) and main run with Hub checkpointing (`notebooks/05_adapt_qwen3.ipynb`, chunks 4 and 5)
+- [ ] Merge, save and verify; quality: bits per character on held-out Urdu, Belebele `urd_Arab`, English control; optional compute-matched control run (chunks 6 and 7)
+- [ ] Re-export (GGUF parity, Q4_K_M, vLLM check) and write-up (chunks 8 and 9)
 
 ## Stage 4: draft (2 to 3 weeks)
 

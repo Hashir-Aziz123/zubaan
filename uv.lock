@@ -4588,63 +4588,6 @@ wheels = [
 ]
 
 [[package]]
-name = "trl"
-version = "1.14.2"
-source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version < '3.11'",
-]
-dependencies = [
-    { name = "accelerate" },
-    { name = "datasets" },
-    { name = "jinja2" },
-    { name = "packaging" },
-    { name = "transformers", version = "5.20.2", source = { registry = "https://pypi.org/simple" } },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/00/7f/eaa2c1b3a54c3125abe472d519309f4010d933fed24d0bf1ecea94313c0b/trl-1.14.2.tar.gz", hash = "sha256:0e6630587c5da50d5574b9fcbaa55540304e7c9aee60763c034f5d2c9e3b5b4d", size = 766266, upload-time = "2026-10-06T20:29:52.627Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/2b/d7/dcd5cdd98a1e34eb8d90ae579042bebe7b3a06a30f41a08c844bee30a8c1/trl-1.14.2-py3-none-any.whl", hash = "sha256:bd97adb0284f2520ae8c5ebf243e2e4b3cbe50f09cb5964547e38dfc1d37694e", size = 927216, upload-time = "2026-10-06T20:29:51.159Z" },
-]
-
-[[package]]
-name = "trl"
-version = "1.17.1"
-source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version >= '3.14' and sys_platform == 'win32'",
-    "python_full_version >= '3.14' and sys_platform == 'emscripten'",
-    "python_full_version >= '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32'",
-    "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform == 'win32'",
-    "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform == 'emscripten'",
-    "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32'",
-    "python_full_version >= '3.11.5' and python_full_version < '3.12' and sys_platform == 'win32'",
-    "python_full_version >= '3.11.5' and python_full_version < '3.12' and sys_platform == 'emscripten'",
-    "python_full_version >= '3.11.5' and python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32'",
-    "python_full_version >= '3.11' and python_full_version < '3.11.5' and sys_platform == 'win32'",
-    "python_full_version >= '3.11' and python_full_version < '3.11.5' and sys_platform == 'emscripten'",
-    "python_full_version >= '3.11' and python_full_version < '3.11.5' and sys_platform != 'emscripten' and sys_platform != 'win32'",
-]
-dependencies = [
-    { name = "accelerate" },
-    { name = "datasets" },
-    { name = "huggingface-hub" },
-    { name = "jinja2" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-    { name = "packaging" },
-    { name = "pandas", version = "3.1.1", source = { registry = "https://pypi.org/simple" } },
-    { name = "psutil" },
-    { name = "pyarrow", version = "26.0.1", source = { registry = "https://pypi.org/simple" } },
-    { name = "pyyaml" },
-    { name = "torch", version = "2.15.0", source = { registry = "https://pypi.org/simple" } },
-    { name = "transformers", version = "5.22.2", source = { registry = "https://pypi.org/simple" } },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/42/f3/2fa41fba303887920724e703b0ab8ca7ebc269e8d14c20effa76ca01fb6b/trl-1.17.1.tar.gz", hash = "sha256:9cb026400594b01dc707c6c724d7d5de969fb6267575e6fb6ce431fa3932c5ce", size = 814790, upload-time = "2026-10-30T14:12:59.502Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a1/96/6305b5dc1c0f36d2178f626f7ee778377407f48ea828c6452355033c8017/trl-1.17.1-py3-none-any.whl", hash = "sha256:be0b4117e4442801f1e0ba2052ef2c813d2b5a5ca351a5d82bc0e9cffc30e3ed", size = 996565, upload-time = "2026-10-30T14:12:57.578Z" },
-]
-
-[[package]]
 name = "truststore"
 version = "0.10.5"
 source = { registry = "https://pypi.org/simple" }
@@ -5048,8 +4991,6 @@ all = [
     { name = "tqdm" },
     { name = "transformers", version = "5.20.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "transformers", version = "5.22.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "trl", version = "1.14.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "trl", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
 audit = [
     { name = "datasets" },
@@ -5103,8 +5044,6 @@ train = [
     { name = "torch", version = "2.15.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "transformers", version = "5.20.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "transformers", version = "5.22.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "trl", version = "1.14.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "trl", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
 
 [package.dev-dependencies]
@@ -5135,7 +5074,6 @@ requires-dist = [
     { name = "torch", marker = "extra == 'train'", specifier = ">=2.3" },
     { name = "tqdm", marker = "extra == 'export'", specifier = ">=4.27" },
     { name = "transformers", marker = "extra == 'audit'", specifier = ">=4.45" },
-    { name = "trl", marker = "extra == 'train'", specifier = ">=0.12" },
     { name = "typer", specifier = ">=0.12" },
     { name = "zubaan", extras = ["audit"], marker = "extra == 'export'" },
     { name = "zubaan", extras = ["audit"], marker = "extra == 'train'" },

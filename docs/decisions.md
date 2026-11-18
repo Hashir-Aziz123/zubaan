@@ -126,3 +126,43 @@ Also fixed on the way: the converter imports `sentencepiece` for Qwen before it 
 The first vLLM run on a Kaggle T4 (vLLM 0.34.0, `dtype half`) started, tokenized 5 of 5 sentences exactly like the extended `tokenizer.json`, and completed text, but `/v1/chat/completions` returned HTTP 400. Cause: `find_local_files` downloaded only `config.json` and `tokenizer.json` from the Hub, so `tokenizer_config.json` (which holds Qwen's `chat_template`) was never copied into the saved model. It now also fetches `tokenizer_config.json`, `generation_config.json` and `special_tokens_map.json` when they exist. Notebook 04 repairs folders exported before the fix by linking the weights and fetching the two tokenizer config files from the base model, so the 1.7B export from notebook 03 does not need to be rerun. The GGUF files are unaffected (the Modelfile has its own template).
 
 Result of the rerun (2026-11-18): `vllm_check.json` passed on a Tesla T4 (compute capability 7.5), vLLM 0.34.0, `dtype half`, 5 of 5 tokenizations identical, completion and chat both returned text. vLLM serving of the extended model is verified.
+
+## 2026-11-18: Stage 3 (adapt) design decisions
+
+All defaults from the stage 3 plan in `continue.md` were accepted. Values marked "start" are starting points to be checked in the smoke run, not tuned numbers.
+
+**Starting model.** The existing extended `Qwen/Qwen3-1.7B` (the post-trained chat model), not `Qwen3-1.7B-Base`. Reason: no rework, and the Stage 2 exports, Ollama and vLLM setups, and the Stage 4 and 5 plans all target it. Cost: training on raw Urdu text will weaken instruction following and `<think>` behavior. The report must say so. Our metrics (bits per character, Belebele log-likelihood scoring, speed, acceptance) do not need chat ability.
+
+**What is trainable.** Two phases. Phase A trains only the 10,000 new embedding rows (the head rows are the same tensor, since the model ties them). Phase B adds LoRA and keeps training the new rows. Old embedding rows stay frozen, implemented as a separate trainable tensor for the new rows rather than a gradient mask, so optimizer state is not allocated for the full matrix. Reason: fits a 16 GB T4 (about 20.5M embedding parameters), and English cannot drift through the embeddings.
+
+**LoRA (start).** Rank 64, alpha 128, dropout 0.05, all attention and MLP linear layers. Learning rate about 2e-4 for LoRA and about 1e-3 for the new rows.
+
+**Data.** Urdu: Wikipedia only (`data/urdu_train.txt`), about 14M tokens (estimate, to be measured). Add a larger source only if held-out Urdu bits per character is still falling when the data runs out. English replay: English Wikipedia, 10% of blocks. Documents are joined with `<|endoftext|>`, matching how the quality harness frames texts.
+
+**Control experiment.** Base Qwen3-1.7B with the base tokenizer, same recipe, matched on compute (same number of tokens), run after the main run if GPU hours allow. Matching on text would cost 8 to 17 GPU hours; matching on compute about 4 to 7. It shows whether gains come from the new tokens or from training on more Urdu.
+
+**Precision.** fp16 autocast with a gradient scaler. The T4 has no BF16. Fall back to fp32 base weights only if the smoke run shows NaN or inf.
+
+**Hugging Face Hub.** A private repo for training checkpoints, token stored as a Kaggle secret. Approved by the user on 2026-11-18 for checkpoints only. Nothing is made public without a separate decision.
+
+**Success checks.** English FLORES bits per character at most 0.02 above the base 1.208. Held-out Urdu bits per character below the untrained 3.57 (must) and at or below the base 2.31 (stretch). Belebele Urdu `acc_char` above the base 33.4%, reported with its Wilson interval (about plus or minus 3 points at 900 questions, so a gain under about 4 points is not distinguishable from noise). GPU budget for the main run: about 10 hours.
+
+**Defaults taken without a question.** Block size 1024, one T4, gradient checkpointing on, plain `transformers` loop instead of `trl`, notebook number 05.
+
+## 2026-11-18: Stage 3 implementation choices (chunks 1 to 3)
+
+**New rows live outside the model.** `adapt/params.py` keeps the trained rows in their own float32 parameter (`AdaptHandle.new_rows`, 10,000 x 2048 for Qwen3-1.7B) and applies them with two forward hooks: the input embedding output is replaced at ids at or above `first_new_id`, and the last `N` columns of the head's logits are replaced by `hidden @ new_rows^T`. The model's own tensors and state_dict are never touched in training, so old rows stay bit for bit identical (tested), no optimizer state is allocated for the other 310M embedding values, and the hooks sidestep peft's handling of tied weights. `merge_new_rows` writes the rows back into the tied matrix and removes the hooks, so the saved folder is an ordinary model. Models with a separate output head are refused (Qwen3-0.6B and 1.7B tie it).
+
+**One optimizer, two phases.** A single AdamW holds a group for the new rows and one for LoRA. LoRA tensors have no gradient in phase A and AdamW skips them, so the new rows keep their moments across the switch. Each phase has its own warmup and cosine schedule (floor 10% of the peak). Default length: 150 steps of phase A and 800 of phase B; each step is 2 x 16 blocks of 1,024 tokens, about 33k tokens, so 950 steps is about 2 epochs if the corpus is about 14M tokens. To be set from the measured token count and speed.
+
+**Data layout.** Each corpus line is one document, written as `<|endoftext|>` plus its tokens, packed end to end into blocks of 1,024 ids; the partial last block is dropped and counted. Urdu and English blocks are separate files (raw little-endian uint32). Each epoch contains every Urdu block once plus English blocks drawn without replacement so that English is 10% of all blocks; epoch `e` shuffles with seed + `e`. The position in the stream is a pure function of the step number, which is what makes resume exact. `blocks_meta.json` records the tokenizer's sha256, and training refuses blocks made with a different tokenizer.
+
+**Contamination guard widened.** The Stage 2 corpus builder checked only FLORES devtest. Belebele passages are FLORES-200 text, so `zubaan adapt prepare` also checks the FLORES dev split and the Belebele passages (Urdu for the Urdu lines, English for the English replay), by the same 8-consecutive-word test. Offending lines are dropped and counted in the metadata (`drop_overlaps`), and the remainder is checked again; a surviving overlap raises.
+
+**Resume.** A checkpoint holds the step, the new rows, the LoRA weights, the optimizer, the gradient scaler and the random state, and is written to a temporary folder and renamed. A test runs 10 steps straight and as 6 plus a resumed 4 and requires identical new rows and LoRA weights (bit for bit on CPU). The newest checkpoint is pushed to `<repo>/last` in the private Hub repo, and a run with no local checkpoint resumes from there. Nothing is pushed unless `hub_repo` is set.
+
+**Guards.** The loop stops with `TrainingDiverged` as soon as a loss is not finite, with a message to switch to fp32. In-training evaluation reports held-out Urdu bits per character and an English FLORES control with the same harness as the Stage 2 quality run (same one-token end-of-text context).
+
+**Dependencies.** `trl` was removed from the `train` extra (own loop). `peft` 0.21 and `accelerate` 1.15 installed next to the pinned `transformers` 5.22 without changing it.
+
+**Measured corpus size (2026-11-18, extended tokenizer, block size 1,024).** Urdu: 295,858 documents, 16,053,605 tokens, 15,677 blocks (357 tokens dropped). English replay: 21,674 paragraphs (12 MB), 2,676,343 tokens, 2,613 blocks. The wider guard (FLORES dev and devtest, Belebele passages) dropped 47 Urdu lines that the Stage 2 devtest-only check had let through, and no English lines. One epoch is 15,677 Urdu blocks plus 1,742 English blocks (10%), 17,419 blocks, 544 steps of 32 blocks. The default 950 steps is therefore about 1.75 epochs. The 14M-token estimate in the plan was low by about 15%.

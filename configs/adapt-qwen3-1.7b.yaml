@@ -1,0 +1,47 @@
+# Stage 3 for Qwen3-1.7B: train the 10,000 new Urdu rows, then LoRA plus the new rows.
+#   uv run zubaan data flores --split dev --out data/flores_dev     # guard against the dev split too
+#   uv run zubaan adapt prepare --config configs/adapt-qwen3-1.7b.yaml   # laptop, no GPU
+#   uv run zubaan adapt run --config configs/adapt-qwen3-1.7b.yaml --steps 30   # smoke run, T4
+#   uv run zubaan adapt run --config configs/adapt-qwen3-1.7b.yaml              # full run, T4
+# Decisions and reasons: docs/decisions.md, 2026-11-18. The learning rates and LoRA shape are
+# starting values to be checked in the smoke run, not tuned numbers. On Kaggle the notebook
+# overrides model_path, data_dir, output_dir and hub_repo.
+
+adapt:
+  model_path: outputs/qwen3-1.7b/model   # the extended model folder (Kaggle: output of notebook 03)
+  urdu_corpus: data/urdu/urdu_train.txt
+  heldout: data/urdu/urdu_heldout.txt
+  english_corpus: data/english/english_replay.txt   # built from English Wikipedia if missing
+  english_mb: 12
+  guard_urdu: [data/flores_urd.txt, data/flores_dev/flores_urd.txt]
+  guard_english: [data/flores_eng.txt, data/flores_dev/flores_eng.txt]
+  guard_belebele: true
+  drop_overlaps: true
+  data_dir: data/adapt
+  block_size: 1024
+  english_replay_ratio: 0.1
+
+  output_dir: outputs/adapted
+  phase_a_steps: 150      # new rows only
+  phase_b_steps: 800      # LoRA plus new rows; 950 steps x 33k tokens is about 2 epochs
+  micro_batch_size: 2
+  grad_accum: 16
+  lr_new_rows: 1.0e-3
+  lr_lora: 2.0e-4
+  warmup_steps: 50
+  lora_rank: 64
+  lora_alpha: 128
+  lora_dropout: 0.05
+  precision: fp16         # T4 has no BF16; switch to fp32 only if the loss goes NaN
+  gradient_checkpointing: true
+  device: cuda
+  seed: 0
+
+  log_every: 10
+  eval_every: 100
+  eval_texts: 200
+  checkpoint_every: 100
+  keep_checkpoints: 2
+  resume: true
+  hub_repo: null          # e.g. your-name/zubaan-qwen3-ckpt (private); needs HF_TOKEN
+  hub_private: true

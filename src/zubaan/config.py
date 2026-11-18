@@ -142,13 +142,70 @@ class ExportConfig(BaseModel):
 
 
 class AdaptConfig(BaseModel):
-    model_path: Path
-    corpus: str = Field(description="Dataset name or path for continued pretraining")
-    english_replay_ratio: float = 0.1
-    lora_rank: int = 16
-    learning_rate: float = 2e-4
-    max_seq_length: int = 2048
+    """Stage 3: continued pretraining of an extended model (zubaan adapt prepare | run)."""
+
+    # Inputs
+    model_path: Path = Field(
+        default=Path("outputs/extend/model"), description="Folder written by 'zubaan extend run'"
+    )
+    urdu_corpus: Path = Path("data/urdu/urdu_train.txt")
+    heldout: Path = Field(
+        default=Path("data/urdu/urdu_heldout.txt"), description="Urdu lines for the eval curve"
+    )
+    english_corpus: Path = Field(
+        default=Path("data/english/english_replay.txt"),
+        description="English replay text; built from English Wikipedia if missing",
+    )
+    english_mb: float = Field(default=12.0, description="Size of the English replay text")
+    guard_urdu: list[Path] = Field(
+        default=[Path("data/flores_urd.txt")],
+        description="Urdu evaluation texts no training line may copy (add the FLORES dev split)",
+    )
+    guard_english: list[Path] = [Path("data/flores_eng.txt")]
+    guard_belebele: bool = Field(
+        default=True, description="Also guard against Belebele passages (needs the datasets pkg)"
+    )
+    drop_overlaps: bool = Field(
+        default=True, description="Drop training lines that overlap evaluation text (else raise)"
+    )
+    data_dir: Path = Field(default=Path("data/adapt"), description="Token blocks go here")
+    block_size: int = 1024
+    english_replay_ratio: float = Field(default=0.1, description="Share of English blocks")
+    # Training
     output_dir: Path = Path("outputs/adapted")
+    first_new_id: int | None = Field(
+        default=None, description="First new token id (default: read from the model folder)"
+    )
+    phase_a_steps: int = Field(default=150, description="Optimizer steps training only new rows")
+    phase_b_steps: int = Field(default=800, description="Steps training LoRA and the new rows")
+    # 2 x 16 blocks of 1024 tokens = about 33k tokens per step, so about 470 steps per epoch
+    micro_batch_size: int = 2
+    grad_accum: int = 16
+    lr_new_rows: float = 1e-3
+    lr_lora: float = 2e-4
+    warmup_steps: int = 50
+    min_lr_ratio: float = 0.1
+    weight_decay: float = 0.0
+    max_grad_norm: float = 1.0
+    lora_rank: int = 64
+    lora_alpha: int = 128
+    lora_dropout: float = 0.05
+    precision: str = Field(default="fp16", description="fp16 (autocast) | fp32")
+    gradient_checkpointing: bool = True
+    device: str = "cuda"
+    seed: int = 0
+    # Monitoring, checkpoints, resume
+    log_every: int = 10
+    eval_every: int = 200
+    eval_texts: int = 200
+    eval_max_chars: int = 400
+    checkpoint_every: int = 100
+    keep_checkpoints: int = 2
+    resume: bool = True
+    hub_repo: str | None = Field(
+        default=None, description="Private Hub repo for checkpoints, e.g. user/zubaan-qwen3-ckpt"
+    )
+    hub_private: bool = True
 
 
 class ProjectConfig(BaseModel):
