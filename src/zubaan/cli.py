@@ -815,6 +815,37 @@ def adapt_run(
     console.print("Next: merge LoRA and the new rows, verify, then evaluate (stage 3, chunks 6-7).")
 
 
+@adapt_app.command("merge")
+def adapt_merge(
+    config: Annotated[Path, typer.Option("--config", exists=True, help="YAML with adapt:")],
+    model_path: Annotated[
+        Optional[Path],  # noqa: UP045
+        typer.Option(help="Override adapt.model_path (the extended model folder)"),
+    ] = None,
+    checkpoint: Annotated[
+        Optional[Path],  # noqa: UP045
+        typer.Option(help="Checkpoint folder (default: newest in <output_dir>/checkpoints)"),
+    ] = None,
+    out: Annotated[
+        Optional[Path],  # noqa: UP045
+        typer.Option(help="Where to save the merged model (default <output_dir>/model)"),
+    ] = None,
+    json_out: Annotated[bool, typer.Option("--json", help="Print the summary as JSON")] = False,
+) -> None:
+    """Merge LoRA and the trained rows into a plain model, save it and verify the folder."""
+    from zubaan.adapt.finalize import merge_and_save
+
+    cfg = _adapt_config(config, model_path)
+    summary = merge_and_save(
+        cfg, checkpoint, out, log=(lambda s: None) if json_out else console.print
+    )
+    if json_out:
+        typer.echo(json.dumps(summary, indent=2, ensure_ascii=False))
+        return
+    console.print(f"Saved and verified: {summary['model_dir']} (trained at step {summary['step']})")
+    console.print("Next: evaluate it, then 'zubaan export all' with model_dir pointing at it.")
+
+
 @app.command()
 def draft() -> None:
     """Build drafters that share the extended vocabulary."""

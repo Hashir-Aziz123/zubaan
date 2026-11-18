@@ -273,3 +273,68 @@ def test_example_config_loads_and_matches_the_decisions():
     assert (cfg.lora_rank, cfg.lora_alpha, cfg.precision) == (64, 128, "fp16")
     assert cfg.english_replay_ratio == 0.1 and cfg.block_size == 1024
     assert cfg.hub_repo is None  # never pushes unless the user sets a private repo
+
+
+# merge and save (chunk 6) ------------------------------------------------------------------------
+
+
+def test_merge_saves_a_verified_plain_model_with_the_old_rows_untouched(world, tiny_base_json):
+    from transformers import AutoModelForCausalLM
+
+    from zubaan.adapt.finalize import merge_and_save
+
+    cfg, tmp = world
+    cfg = cfg.model_copy(update={"merged_dtype": "float32"})
+    run_prepare(cfg, log=lambda s: None)
+    run_adapt(cfg, log=lambda s: None, max_steps=6)  # into phase B, so LoRA has learned something
+    out = tmp / "merged"
+    summary = merge_and_save(
+        cfg, out_dir=out, base_tokenizer_json=tiny_base_json, log=lambda s: None
+    )
+    assert summary["step"] == 6 and summary["metadata"]["trained"] is True
+    assert summary["metadata"]["stage3"]["merge_max_logit_diff"] < 1e-3
+    meta = json.loads((out / "zubaan_extension.json").read_text())
+    assert meta["trained"] is True and meta["first_new_id"] == summary["metadata"]["first_new_id"]
+    for name in ("config.json", "model.safetensors", "tokenizer.json", "tokenizer_config.json"):
+        assert (out / name).exists(), name
+
+    merged = AutoModelForCausalLM.from_pretrained(out, dtype=torch.float32)
+    original = AutoModelForCausalLM.from_pretrained(cfg.model_path, dtype=torch.float32)
+    n_old = meta["first_new_id"]
+    w_new, w_old = merged.get_input_embeddings().weight, original.get_input_embeddings().weight
+    assert w_new.shape == w_old.shape
+    assert torch.equal(w_new[:n_old], w_old[:n_old])  # old rows are the extended model's rows
+    assert not torch.equal(w_new[n_old:], w_old[n_old:])  # the new rows trained
+    assert merged.get_output_embeddings().weight.data_ptr() == w_new.data_ptr()  # still tied
+    assert not any("lora_" in n for n, _ in merged.named_parameters())  # a plain model
+
+
+def test_merge_needs_a_checkpoint_and_the_cli_runs_it(world, tiny_base_json, monkeypatch):
+    from zubaan.adapt.finalize import merge_and_save
+
+    cfg, tmp = world
+    cfg = cfg.model_copy(update={"merged_dtype": "float32"})
+    with pytest.raises(FileNotFoundError, match="no checkpoint"):
+        merge_and_save(cfg, base_tokenizer_json=tiny_base_json, log=lambda s: None)
+
+    run_prepare(cfg, log=lambda s: None)
+    run_adapt(cfg, log=lambda s: None, max_steps=4)
+    monkeypatch.setattr("zubaan.adapt.finalize.load_tokenizer_json", lambda name: tiny_base_json)
+    path = tmp / "cfg.yaml"
+    path.write_text(yaml.safe_dump({"adapt": json.loads(cfg.model_dump_json())}), encoding="utf-8")
+    result = runner.invoke(cli.app, ["adapt", "merge", "--config", str(path), "--json"])
+    assert result.exit_code == 0, result.output
+    out = json.loads(result.stdout)
+    assert out["step"] == 4 and (tmp / "out" / "model" / "model.safetensors").exists()
+
+
+def test_resume_refuses_a_checkpoint_from_a_different_schedule(world):
+    cfg, _ = world
+    run_prepare(cfg, log=lambda s: None)
+    run_adapt(cfg, log=lambda s: None, max_steps=4)
+    changed = cfg.model_copy(update={"phase_b_steps": 9, "lr_lora": 5e-4})
+    with pytest.raises(ValueError, match="different settings.*phase_b_steps.*lr_lora"):
+        run_adapt(changed, log=lambda s: None)
+    # Fields that do not affect the run (logging, checkpoint cadence) may change.
+    again = cfg.model_copy(update={"log_every": 5, "checkpoint_every": 3})
+    assert run_adapt(again, log=lambda s: None, max_steps=2)["resumed_from_step"] == 4

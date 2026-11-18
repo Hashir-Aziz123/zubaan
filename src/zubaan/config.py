@@ -206,6 +206,10 @@ class AdaptConfig(BaseModel):
         default=None, description="Private Hub repo for checkpoints, e.g. user/zubaan-qwen3-ckpt"
     )
     hub_private: bool = True
+    # Merge and save (zubaan adapt merge)
+    merged_dtype: str = Field(
+        default="bfloat16", description="dtype of the saved model (Qwen3's own dtype)"
+    )
 
 
 class ProjectConfig(BaseModel):

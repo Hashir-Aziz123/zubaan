@@ -155,6 +155,42 @@ def download_hub_checkpoint(repo_id: str, directory: Path) -> Path | None:
     return final
 
 
+RESUME_FIELDS = (
+    "phase_a_steps",
+    "phase_b_steps",
+    "micro_batch_size",
+    "grad_accum",
+    "block_size",
+    "lora_rank",
+    "lora_alpha",
+    "seed",
+    "english_replay_ratio",
+    "lr_new_rows",
+    "lr_lora",
+    "precision",
+)
+
+
+def check_resume_compatible(ckpt: Path, cfg: AdaptConfig) -> None:
+    """Refuse to resume a checkpoint that was written under a different schedule or data order.
+
+    The step number selects the data and the learning rate, so changing any of these fields
+    would continue a different run than the one that was saved.
+    """
+    saved = json.loads((ckpt / "meta.json").read_text(encoding="utf-8"))["config"]
+    now = json.loads(cfg.model_dump_json())
+    diffs = [
+        f"{k}: saved {saved.get(k)!r}, now {now[k]!r}"
+        for k in RESUME_FIELDS
+        if saved.get(k) != now[k]
+    ]
+    if diffs:
+        raise ValueError(
+            f"checkpoint {ckpt.name} was made with different settings ({'; '.join(diffs)}); "
+            "use the same config, or point output_dir and hub_repo at a fresh run"
+        )
+
+
 def make_eval_fn(cfg: AdaptConfig, tokenizer, ctx_id: int, device: str) -> Callable | None:
     """Held-out Urdu bits per character, plus an English control, for the training curve."""
     from zubaan.bench.quality import text_bits_per_character
@@ -265,6 +301,7 @@ def run_adapt(
         if ckpt is None and downloader is not None:
             ckpt = downloader(ckpt_dir)
         if ckpt is not None:
+            check_resume_compatible(ckpt, cfg)
             start = load_checkpoint(ckpt, peft_model, handle, optimizer, scaler)
             log(f"Resumed from {ckpt.name} (step {start})")
 

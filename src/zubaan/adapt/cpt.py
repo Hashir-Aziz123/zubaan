@@ -166,8 +166,14 @@ def prune_checkpoints(directory: Path, keep: int) -> None:
         shutil.rmtree(old, ignore_errors=True)
 
 
-def load_checkpoint(path: Path, model, handle: AdaptHandle, optimizer, scaler) -> int:
-    """Restore a checkpoint into a freshly prepared model. Returns the step it was saved at."""
+def load_checkpoint(
+    path: Path, model, handle: AdaptHandle, optimizer=None, scaler=None, restore_state: bool = True
+) -> int:
+    """Restore a checkpoint into a freshly prepared model. Returns the step it was saved at.
+
+    The new rows and LoRA weights are always restored. With ``restore_state`` the optimizer,
+    scaler and random state are restored too (needed to resume training, not to merge).
+    """
     import torch
     from peft import set_peft_model_state_dict
 
@@ -175,11 +181,13 @@ def load_checkpoint(path: Path, model, handle: AdaptHandle, optimizer, scaler) -
     with torch.no_grad():
         handle.new_rows.copy_(torch.load(path / "new_rows.pt"))
     set_peft_model_state_dict(model, torch.load(path / "lora.pt"))
-    trainer = torch.load(path / "trainer.pt", weights_only=False)
-    optimizer.load_state_dict(trainer["optimizer"])
-    if scaler is not None and trainer["scaler"] is not None:
-        scaler.load_state_dict(trainer["scaler"])
-    _restore_rng(trainer["rng"])
+    if restore_state:
+        trainer = torch.load(path / "trainer.pt", weights_only=False)
+        if optimizer is not None:
+            optimizer.load_state_dict(trainer["optimizer"])
+        if scaler is not None and trainer["scaler"] is not None:
+            scaler.load_state_dict(trainer["scaler"])
+        _restore_rng(trainer["rng"])
     return int(meta["step"])
 
 

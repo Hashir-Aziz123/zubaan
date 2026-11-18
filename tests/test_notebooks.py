@@ -159,3 +159,74 @@ def test_notebook4_checks_tokenization_against_the_extended_tokenizer_json(noteb
     cell = next(c for c in code_cells(notebook4) if "/tokenize" in c)
     assert "tokenizer.json" in cell and "assert not mismatches" in cell
     assert "vllm_check.json" in cell
+
+
+# notebook 05: stage 3 adapt -------------------------------------------------------------------
+
+
+SCRIPT5 = Path(__file__).parent.parent / "notebooks" / "make_05_notebook.py"
+
+
+@pytest.fixture(scope="module")
+def notebook5():
+    spec = importlib.util.spec_from_file_location("make_05_notebook", SCRIPT5)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.build("abc1234")
+
+
+def test_notebook5_pins_the_commit_and_every_cell_compiles(notebook5):
+    cells = code_cells(notebook5)
+    assert any('COMMIT = "abc1234"' in c for c in cells)
+    for i, src in enumerate(cells):
+        py = "\n".join(re.sub(r"^(\s*)!.*", r"\1pass", line) for line in src.splitlines())
+        compile(py, f"cell {i}", "exec")
+
+
+def _run_config_cell(notebook5, tmp_path, monkeypatch, mode, hub):
+    cell = next(c for c in code_cells(notebook5) if 'Path("adapt.yaml").write_text' in c)
+    monkeypatch.chdir(tmp_path)
+    work = tmp_path / "work"
+    work.mkdir(exist_ok=True)
+    env = {"MODE": mode, "HUB_REPO": hub, "MICRO_BATCH": 2, "MODEL_DIR": Path("/kaggle/input/m")}
+    cell = cell.replace('Path("/kaggle/working")', f"Path({str(work)!r})")
+    exec(compile(cell, "config cell", "exec"), env)
+    return load_config(tmp_path / "adapt.yaml")
+
+
+def test_notebook5_main_config_matches_the_decisions(notebook5, tmp_path, monkeypatch):
+    cfg = _run_config_cell(notebook5, tmp_path, monkeypatch, "main", "me/ckpt")
+    a = cfg.adapt
+    assert (a.lora_rank, a.lora_alpha, a.precision, a.device) == (64, 128, "fp16", "cuda")
+    assert (a.phase_a_steps, a.phase_b_steps, a.grad_accum) == (150, 800, 16)
+    assert a.english_replay_ratio == 0.1 and a.block_size == 1024
+    assert a.hub_repo == "me/ckpt" and a.hub_private is True
+    assert a.output_dir.name == "adapted"
+    assert cfg.urdu_corpus is not None  # 'zubaan data urdu --config adapt.yaml' needs this section
+
+
+def test_notebook5_smoke_never_shares_a_hub_repo_with_the_main_run(
+    notebook5, tmp_path, monkeypatch
+):
+    smoke = _run_config_cell(notebook5, tmp_path, monkeypatch, "smoke", "me/ckpt").adapt
+    assert smoke.hub_repo == "me/ckpt-smoke" and smoke.output_dir.name == "adapt_smoke"
+    assert smoke.phase_a_steps + smoke.phase_b_steps == 30 and smoke.checkpoint_every == 10
+    assert _run_config_cell(notebook5, tmp_path, monkeypatch, "smoke", "").adapt.hub_repo is None
+
+
+def test_notebook5_has_no_secret_and_main_work_is_gated(notebook5):
+    joined = "\n".join(code_cells(notebook5))
+    assert "hf_" not in joined  # no token in code
+    assert 'get_secret("HF_TOKEN")' in joined
+    assert 'HUB_REPO = ""' in joined  # nothing is pushed unless the user sets a repo
+    for marker in ("run_adapt(cfg, log=print)\nprint({k", "!zubaan adapt merge"):
+        cell = next(c for c in code_cells(notebook5) if marker in c.replace("    ", ""))
+        assert cell.startswith("if MODE == ")
+
+
+def test_notebook5_prepares_data_before_it_trains(notebook5):
+    cells = code_cells(notebook5)
+    prepare = next(i for i, c in enumerate(cells) if "!zubaan adapt prepare" in c)
+    check = next(i for i, c in enumerate(cells) if "5 fp16 steps" in c)
+    smoke = next(i for i, c in enumerate(cells) if "resumed_from_step" in c and "max_steps=20" in c)
+    assert prepare < check < smoke

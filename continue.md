@@ -136,7 +136,9 @@ Each chunk has one deliverable, a test that can fail, and a done criterion. "Lap
 - [x] Chunk 2: `adapt/params.py` (new rows as their own tensor, LoRA, phases, merge)
 - [x] Chunk 3: `adapt/cpt.py`, `adapt/pipeline.py`, `AdaptConfig`, `zubaan adapt run`, `configs/adapt-qwen3-1.7b.yaml`. 40 new tests, all CPU, tiny random model; exact-resume test passes
 - [x] Real corpus prepared locally in 2 minutes: 16.05M Urdu tokens, 15,677 blocks, 2,613 English blocks, 47 Urdu lines dropped by the wider guard. One epoch is 544 steps, so the default 950 steps is about 1.75 epochs. `data/adapt/` is gitignored; Kaggle needs to rerun `adapt prepare` or take it as a dataset
-- [ ] Chunk 0 and chunk 4: Kaggle environment check and smoke run, `notebooks/05_adapt_qwen3.ipynb` (not written yet). You still need the private Hub repo and token (decision 3)
+- [x] Chunk 6: `adapt/finalize.py` and `zubaan adapt merge` (merge, save, verify) on a tiny model; resume refuses a checkpoint from a different schedule
+- [x] Chunks 0 and 4 code: `notebooks/make_05_notebook.py` written and tested (modes check, smoke, main). The `.ipynb` is NOT generated yet: it pins a commit that must be pushed first (`git push`, then `python notebooks/make_05_notebook.py`, commit the notebook)
+- [ ] Run notebook 05 on Kaggle: `check`, then `smoke`, then `main`. You still need the private Hub repo and the HF_TOKEN secret (decision 3)
 - [ ] Chunk 5 main run; chunk 6 merge, save and verify (`merge_lora` and `merge_new_rows` exist, the folder writer does not); chunk 7 evaluation; chunk 8 re-export; chunk 9 write-up
 
 ## Order
