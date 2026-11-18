@@ -1,7 +1,7 @@
 # ruff: noqa: E501
 """Writes notebooks/07_adapt_main_qwen3.ipynb.
 
-Run: python notebooks/make_07_notebook.py [COMMIT]   (COMMIT must be pushed to GitHub)
+Run: python notebooks/make_07_notebook.py [COMMIT [HUB_REPO]]   (COMMIT must be pushed to GitHub)
 """
 
 import json
@@ -97,6 +97,11 @@ def main() -> None:
     )
     out = Path(__file__).parent / "07_adapt_main_qwen3.ipynb"
     nb = build(commit)
+    if len(sys.argv) > 2:  # fill in the user's private Hub repo in the settings cell
+        first = nb["cells"][1]
+        first["source"] = [
+            ln.replace('HUB_REPO = ""', f'HUB_REPO = "{sys.argv[2]}"') for ln in first["source"]
+        ]
     for i, cell in enumerate(nb["cells"]):
         cell["id"] = f"cell-{i}"
     out.write_text(
