@@ -95,7 +95,7 @@ def test_main_notebook_checks_the_hub_before_training_and_trains_ungated(nb7):
     assert not re.search(r"hf_[A-Za-z0-9]{20,}", "\n".join(cells))  # no token in code
 
 
-def test_speed_notebook_tests_the_hub_only_when_asked_and_runs_the_check_first(nb6, tmp_path, monkeypatch):
+def test_speed_notebook_tests_the_hub_only_when_asked(nb6, tmp_path, monkeypatch):
     cells = code_cells(nb6)
     test = next(c for c in cells if "make_hub_uploader" in c)
     assert test.startswith("if HUB_REPO:") and '"-test"' in test  # skipped without a repo
