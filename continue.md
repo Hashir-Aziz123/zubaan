@@ -1,6 +1,23 @@
-# Where we left off (2026-11-18)
+# Where we left off (end of 2026-11-18)
 
-Stage 1 and Stage 2 are done. Stage 3 is planned below and needs a few decisions from you before any code is written. To resume, tell Claude: "read continue.md and pick up from there".
+Stages 1 and 2 are done. Stage 3 (adapt) is fully built and tested on the laptop; the smoke and speed runs passed on Kaggle; **the main run has not started**. To resume, tell Claude: "read continue.md and pick up from there".
+
+## Tomorrow: start the main run (notebook 07)
+
+1. On Kaggle open Add-ons > Secrets and add a secret labelled exactly `HF_TOKEN` (a Hugging Face **write** token), with the **attached** toggle on for the notebook. The last attempt of notebook 07 stopped at the SECRET cell with "No user secrets exist ... label HF_TOKEN": the secret was not attached. Nothing else failed (T4 found, versions fine).
+2. Upload `notebooks/07_adapt_main_qwen3.ipynb` (already has `HUB_REPO = hashiraziz21/zubaan-qwen3-ckpt`, `MICRO_BATCH = 1`, `GRAD_CHECKPOINT = False`, 100 + 700 steps). Settings: GPU T4, Internet on, input = finished output of notebook 03, secret attached. Make the Hub repo private first (the notebook asserts it).
+3. Run with *Save Version > Save & Run All (Commit)*, so it keeps going with the tab closed. Expect about 9 h of GPU time (800 steps x 32,768 tokens at 850 tok/s is 8.6 h, plus the model load, evals and uploads). Check your weekly Kaggle quota first.
+4. Watch the log: `OK: Hub writable` after the data step; no `WARNING: Hub upload` at step 50; evals every 100 steps (Urdu bits per character should keep falling from the smoke run's 2.61; English should stay near 1.2).
+5. If the session ends or crashes, run the notebook again with the same settings: it resumes from `<repo>/last` with the same data order. If it runs out of GPU memory, set `MICRO_BATCH = 2`, `GRAD_CHECKPOINT = True` (the resume code refuses a changed micro batch, so that restarts from step 0).
+6. When it prints `finished`, the merge cell saves and verifies the merged model. Then continue with chunk 7 (evaluation), below.
+
+If the run is stopped early, any checkpoint can be merged: `zubaan adapt merge --config adapt.yaml` (newest) or `--milestone STEP` (kept every 200 steps). Its learning rate will not have decayed, so it is usable but a little noisier than a finished run.
+
+## What was measured on Kaggle today (T4)
+
+- **Smoke run (notebook 05):** 30 steps, fp16 stable (the loss scaler skips a few early steps, normal). Median 582 tokens/s at micro batch 2 with gradient checkpointing, peak 9.29 GB, so 950 steps would be 14.9 h: too long. Kill and resume through the Hub worked. Held-out Urdu bits per character 3.09, 2.85, 2.61 at steps 10, 20, 30 (untrained 3.57, base 2.31). English eval on 100 lines: no sign of damage (that sample is not comparable to the 1.208 baseline).
+- **Speed trial (notebook 06):** micro batch 2 with checkpointing 592 tok/s (9.28 GB); micro batch 4 with checkpointing and micro batch 2 without: out of memory; **micro batch 1 without checkpointing 850 tok/s (13.26 GB)**, 44% faster, chosen. Files in `reports/` (gitignored): `smoke_report.json`, `speed_report.json`. The Hub round-trip test in notebook 06 was not run (07 has its own Hub write check instead).
+- The main schedule was cut from 950 to 800 steps (100 new-rows-only + 700 LoRA plus rows), about 1.47 passes over the Urdu data, to fit a 10 h budget.
 
 ## State in one paragraph
 
@@ -19,7 +36,7 @@ Learned Urdu BPE merges on cleaned Wikipedia (Arabic-block filter so English can
 
 ## Git state
 
-Local `main` is ahead of GitHub. Pushed through `dbff2e8`. Not pushed: `b74aa9e` (notebook 04), `26ec9bc` (chat template fix), `f913880`, `40f02ba`, and the final docs commit. Ask before pushing.
+Everything is pushed except this file's update. Notebooks 06 and 07 install zubaan from commit `98fb1a5` (pushed); later commits only changed notebook settings and tests. Stage 3 code: `src/zubaan/adapt/` (data, params, cpt, pipeline, finalize), CLI `zubaan adapt prepare | run | merge [--milestone STEP]`, config `AdaptConfig` (new field `milestone_every`). 476 tests pass, ruff clean. Ask before pushing.
 
 ## Files you have locally (gitignored)
 
@@ -137,9 +154,12 @@ Each chunk has one deliverable, a test that can fail, and a done criterion. "Lap
 - [x] Chunk 3: `adapt/cpt.py`, `adapt/pipeline.py`, `AdaptConfig`, `zubaan adapt run`, `configs/adapt-qwen3-1.7b.yaml`. 40 new tests, all CPU, tiny random model; exact-resume test passes
 - [x] Real corpus prepared locally in 2 minutes: 16.05M Urdu tokens, 15,677 blocks, 2,613 English blocks, 47 Urdu lines dropped by the wider guard. One epoch is 544 steps, so the default 950 steps is about 1.75 epochs. `data/adapt/` is gitignored; Kaggle needs to rerun `adapt prepare` or take it as a dataset
 - [x] Chunk 6: `adapt/finalize.py` and `zubaan adapt merge` (merge, save, verify) on a tiny model; resume refuses a checkpoint from a different schedule
-- [x] Chunks 0 and 4 code: `notebooks/make_05_notebook.py` written and tested (modes check, smoke, main). The `.ipynb` is NOT generated yet: it pins a commit that must be pushed first (`git push`, then `python notebooks/make_05_notebook.py`, commit the notebook)
-- [ ] Run notebook 05 on Kaggle: `check`, then `smoke`, then `main`. You still need the private Hub repo and the HF_TOKEN secret (decision 3)
-- [ ] Chunk 5 main run; chunk 6 merge, save and verify (`merge_lora` and `merge_new_rows` exist, the folder writer does not); chunk 7 evaluation; chunk 8 re-export; chunk 9 write-up
+- [x] Chunks 0 and 4: notebook 05 (`check` and `smoke` modes) ran on Kaggle. Two notebook bugs were found and fixed (Kaggle's torchao 0.10 breaks peft: removed in the install cell; a `history` key `run_adapt` does not return; and a stale step-30 smoke checkpoint on the Hub: smoke now clears it). Notebook 05 is left as is
+- [x] Speed trial and checkpoint plan: notebook 06 (speed trial, optional Hub round-trip test) and notebook 07 (main run, Hub required) built from `notebooks/adapt_cells.py`, which reuses 05's cells. Checkpoint to the Hub every 50 steps, permanent copy every 200 (`<repo>/milestones/step-NNNNNNN`), upload failure warns without stopping training, `merge --milestone`
+- [x] Hub repo `hashiraziz21/zubaan-qwen3-ckpt` created (keep it private); token made. The secret is not yet attached to the Kaggle notebook (see Tomorrow)
+- [ ] Chunk 5: main run in notebook 07 (about 9 GPU hours), including chunk 6 merge, save and verify (the notebook runs `zubaan adapt merge` at the end)
+- [ ] Optional compute-matched control run (decision 6) after the main run, before chunk 7
+- [ ] Chunk 7 evaluation entry point for a saved folder and the quality table; chunk 8 re-export and recheck; chunk 9 write-up (`docs/stage3-usage.md`, roadmap and CLAUDE.md stage table)
 
 ## Order
 
@@ -173,4 +193,6 @@ Stage 4 (drafters sharing the extended vocabulary, distilled from the adapted ta
 - Never load real models in default tests. Never push to Hugging Face or PyPI without asking.
 - Gitignored: `reports/`, `data/`, `outputs/`, `tools/`. Use `newline="\n"` when writing from Python on Windows. No em dashes.
 - Kaggle CLI: `uvx --with six kaggle ...`, after `kaggle auth login`. Kaggle notebooks pin a commit that must be pushed first.
-- Notebook number 05 is for Stage 3 (04 is the vLLM check).
+- Notebook numbers: 05 Stage 3 smoke (do not rewrite), 06 speed trial, 07 main run (04 is the vLLM check). The user asked for new notebooks rather than edits to old ones. Generators: `notebooks/make_0N_notebook.py`; 06 and 07 take `[COMMIT [HUB_REPO]]` and share `notebooks/adapt_cells.py`. Regenerate only after the pinned commit is pushed.
+- Run `ruff format` only on files you changed (it reformats old notebooks). Do not chain `git push` after other steps with `&&` and `tail`: a failed lint hid behind it once. GitHub pushes timed out several times; retrying worked.
+- Throughput note: `tokens_per_s` in the log covers the time since the last log line, so the line after an eval or upload reads low.
