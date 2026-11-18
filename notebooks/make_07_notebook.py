@@ -16,11 +16,15 @@ SETTINGS = """
 # The Hub repo is required: it is what makes the run safe. Create it as PRIVATE first. It must be a
 # different repo from the smoke one (notebook 05 used HUB_REPO + "-smoke", so there is no clash).
 HUB_REPO = ""            # e.g. "your-name/zubaan-qwen3-ckpt"
-MICRO_BATCH = 2          # from notebook 06 (speed_report.json): the micro batch of the fastest setting
-GRAD_CHECKPOINT = True   # from notebook 06: gradient checkpointing of the fastest setting
+MICRO_BATCH = 1          # from notebook 06 (T4, 2026-11-18): 850 tok/s, peak 13.3 GB; micro batch 2 without checkpointing ran out of memory
+GRAD_CHECKPOINT = False  # from notebook 06: off is 44% faster than on (592 tok/s) and still fits
 PHASE_A_STEPS = 100      # steps that train only the 10,000 new rows
 PHASE_B_STEPS = 700      # steps that train LoRA plus the new rows; the learning rate decays to its minimum over these
 # Do not change any of the lines above between sessions of the same run: a resumed run refuses a changed schedule.
+import os
+
+# Peak memory is 13.3 GB of about 14.5: let the allocator avoid fragmentation. Must be set before torch starts.
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 assert HUB_REPO, "set HUB_REPO: without it a crash or the 12-hour limit loses the run"
 assert 32 % MICRO_BATCH == 0, "MICRO_BATCH must divide 32"
 OUT_NAME = "adapted"

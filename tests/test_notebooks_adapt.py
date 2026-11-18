@@ -80,7 +80,12 @@ def test_main_notebook_refuses_to_run_without_a_hub_repo_or_with_a_bad_micro_bat
     with pytest.raises(AssertionError, match="HUB_REPO"):
         exec(settings, {})
     with pytest.raises(AssertionError, match="divide 32"):
-        exec(settings.replace('HUB_REPO = ""', 'HUB_REPO = "a/b"').replace("= 2 ", "= 3 "), {})
+        exec(
+            settings.replace('HUB_REPO = ""', 'HUB_REPO = "a/b"').replace(
+                "MICRO_BATCH = 1 ", "MICRO_BATCH = 3 "
+            ),
+            {},
+        )
 
 
 def test_main_notebook_checks_the_hub_before_training_and_trains_ungated(nb7):
@@ -144,3 +149,9 @@ def test_speed_trial_picks_the_fastest_setting_that_fits(nb6, tmp_path, monkeypa
 def test_notebook_05_is_untouched_by_the_new_notebooks():
     text = (NB_DIR / "make_05_notebook.py").read_text(encoding="utf-8")
     assert 'MODE in ("check", "smoke", "main")' in text
+
+
+def test_main_notebook_uses_the_speed_trial_winner_and_limits_fragmentation(nb7):
+    settings = code_cells(nb7)[0]
+    assert "MICRO_BATCH = 1 " in settings and "GRAD_CHECKPOINT = False" in settings
+    assert "expandable_segments:True" in settings
