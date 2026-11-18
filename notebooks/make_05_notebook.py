@@ -28,15 +28,11 @@ def code(text: str) -> dict:
 
 
 SETTINGS = """
-# What to run. Change MODE between sessions: "check", "speed", "smoke", then "main".
-MODE = "smoke"       # "check": versions and a 5-step fp16 test | "speed": check plus a speed and memory trial of four settings | "smoke": check plus a 30-step run with a kill and resume | "main": the full run, then merge and save
+# What to run. Change MODE between sessions: "check", then "smoke", then "main".
+MODE = "smoke"       # "check": versions and a 5-step fp16 test | "smoke": check plus a 30-step run with a kill and resume | "main": the full run, then merge and save
 HUB_REPO = ""        # a PRIVATE Hub repo for checkpoints, e.g. "your-name/zubaan-qwen3-ckpt". Empty = no Hub (a crash loses the run)
-MICRO_BATCH = 2      # blocks of 1024 tokens per forward pass (each step always sees 32 blocks); choose it from the speed trial
-GRAD_CHECKPOINT = True   # False is faster but needs more GPU memory; choose it from the speed trial
-PHASE_A_STEPS = 100  # main run: steps training only the new rows
-PHASE_B_STEPS = 700  # main run: steps training LoRA plus the new rows (the learning rate decays to its end over these)
-assert MODE in ("check", "speed", "smoke", "main"), MODE
-assert 32 % MICRO_BATCH == 0, "MICRO_BATCH must divide 32"
+MICRO_BATCH = 2      # blocks of 1024 tokens per forward pass; lower it if the smoke run runs out of GPU memory
+assert MODE in ("check", "smoke", "main"), MODE
 """
 
 INSTALL = """
@@ -165,7 +161,7 @@ adapt = {
     "lora_alpha": 128,
     "lora_dropout": 0.05,
     "precision": "fp16",
-    "gradient_checkpointing": GRAD_CHECKPOINT,
+    "gradient_checkpointing": True,
     "device": "cuda",
     "seed": 0,
     "hub_repo": hub,
@@ -173,13 +169,10 @@ adapt = {
     "merged_dtype": "bfloat16",
 }
 if MODE == "main":
-    # New rows only, then LoRA plus new rows; always 32 blocks (33k tokens) per step.
-    # A checkpoint every 50 steps goes to the Hub (<repo>/last); every 200th is also kept for good
-    # under <repo>/milestones, so any of them can be merged and evaluated later.
+    # 150 steps of new rows only, then 800 steps of LoRA plus new rows; 32 blocks (33k tokens) per step.
     adapt.update(
-        phase_a_steps=PHASE_A_STEPS, phase_b_steps=PHASE_B_STEPS, grad_accum=32 // MICRO_BATCH,
-        warmup_steps=50, log_every=10, eval_every=100, eval_texts=200,
-        checkpoint_every=50, keep_checkpoints=2, milestone_every=200,
+        phase_a_steps=150, phase_b_steps=800, grad_accum=16, warmup_steps=50,
+        log_every=10, eval_every=100, eval_texts=200, checkpoint_every=100, keep_checkpoints=2,
     )
 else:
     # A 30-step schedule with both phases. Fewer blocks per step (grad_accum 4) so it is quick; the
@@ -187,7 +180,6 @@ else:
     adapt.update(
         phase_a_steps=15, phase_b_steps=15, grad_accum=4, warmup_steps=3,
         log_every=1, eval_every=10, eval_texts=50, checkpoint_every=10, keep_checkpoints=2,
-        milestone_every=10,
     )
 config = {
     "urdu_corpus": {"raw_dir": "data/raw", "out_dir": "data/urdu", "flores": "data/flores_urd.txt", "max_mb": 100, "heldout_percent": 1.0},
@@ -219,12 +211,6 @@ print(f"steps skipped by the loss scaler: {skipped} of 5")
 assert len(losses) == 5 and all(x == x and abs(x) < 1e4 for x in losses), losses
 assert skipped < 5, "every step overflowed: use precision fp32"
 print("OK: 5 fp16 steps, finite losses", [round(x, 3) for x in losses])
-import gc
-
-import torch
-
-gc.collect()
-torch.cuda.empty_cache()  # hand the memory back before the next stage
 """
 
 DATA = """
@@ -258,12 +244,11 @@ cfg = load_config("adapt.yaml").adapt
 if cfg.hub_repo:  # a smoke run must start from step 0, so clear any older smoke checkpoint
     from huggingface_hub import HfApi
 
-    for folder in ("last", "milestones"):
-        try:
-            HfApi().delete_folder(folder, repo_id=cfg.hub_repo, repo_type="model")
-            print("cleared old", folder, "from", cfg.hub_repo)
-        except Exception as e:
-            print("nothing to clear in", folder, ":", type(e).__name__)
+    try:
+        HfApi().delete_folder("last", repo_id=cfg.hub_repo, repo_type="model")
+        print("cleared an old smoke checkpoint from", cfg.hub_repo)
+    except Exception as e:
+        print("no old smoke checkpoint to clear:", type(e).__name__)
 shutil.rmtree(cfg.output_dir / "checkpoints", ignore_errors=True)
 first = run_adapt(cfg, log=print, max_steps=20)
 assert first["final_step"] == 20 and not first["finished"]
@@ -273,66 +258,6 @@ if cfg.hub_repo:
 second = run_adapt(cfg, log=print)
 assert second["resumed_from_step"] == 20 and second["finished"], second
 print("OK: killed at step 20, resumed, finished at step", second["final_step"])
-if cfg.hub_repo:  # the permanent copies and the newest checkpoint must really be on the Hub
-    from huggingface_hub import HfApi
-
-    files = set(HfApi().list_repo_files(cfg.hub_repo))
-    for need in ("last/meta.json", "milestones/step-0000010/meta.json", "milestones/step-0000030/meta.json"):
-        assert need in files, f"{need} is missing from {cfg.hub_repo}: the Hub upload did not work"
-    print("OK: Hub holds last/ and the milestones", sorted(f for f in files if f.endswith("meta.json")))
-"""
-
-SPEED = """
-# SPEED: the same few real steps under four settings, each in its own process so that an out-of-memory
-# error in one cannot hurt the others. Phase B (LoRA plus new rows) is what the main run mostly does,
-# so the speed is taken from phase B steps. Then set MICRO_BATCH and GRAD_CHECKPOINT to the winner.
-import copy
-import shutil
-import statistics
-import subprocess
-
-import yaml
-
-base = yaml.safe_load(Path("adapt.yaml").read_text())
-VARIANTS = [("mb2_ckpt_on", 2, True), ("mb4_ckpt_on", 4, True), ("mb1_ckpt_off", 1, False), ("mb2_ckpt_off", 2, False)]
-results = []
-for name, mb, gc_on in VARIANTS:
-    conf = copy.deepcopy(base)
-    out = WORK / f"speed_{name}"
-    shutil.rmtree(out, ignore_errors=True)
-    conf["adapt"].update(
-        output_dir=str(out), hub_repo=None, resume=False, micro_batch_size=mb,
-        gradient_checkpointing=gc_on, grad_accum=8 // mb, phase_a_steps=2, phase_b_steps=10,
-        warmup_steps=1, log_every=1, eval_every=9999, eval_texts=5, checkpoint_every=9999, keep_checkpoints=1,
-    )
-    cfg_file = Path(f"speed_{name}.yaml")
-    cfg_file.write_text(yaml.safe_dump(conf, sort_keys=False))
-    r = subprocess.run(["zubaan", "adapt", "run", "--config", str(cfg_file), "--steps", "8"], capture_output=True, text=True)
-    rows = []
-    if (out / "train_log.jsonl").exists():
-        rows = [json.loads(line) for line in (out / "train_log.jsonl").read_text().splitlines()]
-    steps = [x for x in rows if "loss" in x]
-    phase_b = [x["tokens_per_s"] for x in steps if x["phase"] == "B"][1:]  # the first B step pays for the switch
-    if r.returncode != 0 or len(phase_b) < 3:
-        text = r.stdout + r.stderr
-        why = "out of GPU memory" if "out of memory" in text.lower() else text.strip().splitlines()[-1:]
-        res = {"name": name, "micro_batch": mb, "gradient_checkpointing": gc_on, "ok": False, "why": why}
-    else:
-        tps = statistics.median(phase_b)
-        res = {
-            "name": name, "micro_batch": mb, "gradient_checkpointing": gc_on, "ok": True,
-            "median_tokens_per_s": round(tps), "peak_gpu_gb": round(max(x["gpu_mem_gb"] for x in steps), 2),
-            "hours_per_100_steps": round(100 * 32 * 1024 / tps / 3600, 2),
-        }
-    print(res)
-    results.append(res)
-    shutil.rmtree(out, ignore_errors=True)
-ok = [x for x in results if x["ok"] and x["peak_gpu_gb"] < 14.0]
-assert ok, "no setting worked: send the lines above"
-best = max(ok, key=lambda x: x["median_tokens_per_s"])
-(WORK / "speed_report.json").write_text(json.dumps({"gpu": gpu_name, "results": results, "best": best["name"]}, indent=2))
-print("fastest that fits:", best["name"], "->", best["hours_per_100_steps"], "hours per 100 steps")
-print("Set MICRO_BATCH =", best["micro_batch"], "and GRAD_CHECKPOINT =", best["gradient_checkpointing"], "in the first cell, then send speed_report.json.")
 """
 
 SMOKE_REPORT = """
@@ -344,8 +269,8 @@ evals = [r for r in rows if "eval" in r]
 assert all(r["loss"] == r["loss"] for r in steps), "NaN loss in the log"
 tps = [r["tokens_per_s"] for r in steps[1:]]  # the first step includes CUDA warm-up
 peak = max(r.get("gpu_mem_gb", 0) for r in steps)
-tokens_per_step = 32 * 1024  # the main run: 32 blocks of 1024 tokens per step
-total_steps = PHASE_A_STEPS + PHASE_B_STEPS
+tokens_per_step = 2 * 16 * 1024  # the main run: micro batch 2 x accumulation 16 x 1024
+total_steps = 150 + 800
 n_urdu = meta["urdu"]["n_blocks"]
 epoch_blocks = n_urdu + round(n_urdu * 0.1 / 0.9)  # Urdu blocks plus the 10% English replay
 median_tps = statistics.median(tps)
@@ -353,7 +278,6 @@ hours = total_steps * tokens_per_step / median_tps / 3600
 report = {
     "gpu": gpu_name,
     "micro_batch": MICRO_BATCH,
-    "gradient_checkpointing": GRAD_CHECKPOINT,
     "median_tokens_per_s": round(median_tps),
     "peak_gpu_gb": round(peak, 2),
     "first_loss": steps[0]["loss"],
@@ -406,12 +330,11 @@ def build(commit: str) -> dict:
 
 Continued pretraining of the extended model: first only the 10,000 new embedding rows, then LoRA plus the new rows, on Urdu Wikipedia with 10% English Wikipedia mixed in. All logic lives in the `zubaan` package (`zubaan adapt prepare | run | merge`); this notebook installs it, checks the machine and calls it. Decisions and reasons: `docs/decisions.md`, 2026-11-18.
 
-**Four modes, run in this order** (set `MODE` in the first code cell):
+**Three modes, run in this order** (set `MODE` in the first code cell):
 
 1. `check`: versions, GPU, and 5 real fp16 training steps (both phases). About 5 minutes plus data preparation. Fails loudly if the loss goes NaN.
-2. `speed`: everything in `check`, then 8 real steps under four settings (micro batch and gradient checkpointing), each in its own process. Prints speed and peak memory for each and names the fastest that fits. **Send back `speed_report.json`**, then set `MICRO_BATCH` and `GRAD_CHECKPOINT` in the first cell.
-3. `smoke`: everything in `check`, then a 30-step run that is stopped at step 20, loses its local checkpoints and resumes from the Hub, and checks that the Hub holds the newest checkpoint and the permanent milestone copies. **Send back `smoke_report.json`.**
-4. `main`: `PHASE_A_STEPS` + `PHASE_B_STEPS` steps (default 800, 32 blocks each), a checkpoint to the Hub every 50 steps and a permanent copy every 200, then merge, save and verify. Use *Save Version > Save & Run All (Commit)* with a Hub repo so it can resume. Any milestone can be merged later with `zubaan adapt merge --milestone STEP`.
+2. `smoke`: everything in `check`, then a 30-step run that is stopped at step 20, loses its local checkpoints and resumes. It reports tokens per second and peak GPU memory and projects the main run's hours. **Send back `smoke_report.json`.**
+3. `main`: the full schedule (950 steps, about 1.75 epochs), then merge, save and verify the model. Several hours; use *Save Version > Save & Run All (Commit)* and give it a Hub repo so it can resume.
 
 Settings before running:
 
@@ -442,10 +365,6 @@ Settings before running:
             "## 4. Check: five fp16 training steps\n\nCovers the new-rows phase and the LoRA phase, so an fp16 overflow shows up in minutes instead of hours."
         ),
         code(CHECK_TRAIN),
-        md(
-            "## 4b. Speed trial (MODE = speed)\n\nFour settings, a few real steps each. Pick the fastest one that fits in memory."
-        ),
-        code("if MODE == 'speed':\n" + "\n".join("    " + ln for ln in SPEED.strip().splitlines())),
         md(
             "## 5. Smoke run (MODE = smoke)\n\nA short run that is killed and resumed. Reports speed and memory."
         ),
