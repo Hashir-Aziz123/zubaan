@@ -176,3 +176,38 @@ assert summary["finished"], "the schedule did not finish: run this notebook agai
 for e in summary["evals"]:
     print(e["step"], e["eval"])
 """
+
+# Hub round trip with a stand-in checkpoint (no training): the exact upload and download code of the
+# main run, including the permanent milestone copy. Uses its own throwaway repo.
+HUB_TEST = """
+if HUB_REPO:
+    import shutil
+
+    from huggingface_hub import HfApi
+
+    from zubaan.adapt.pipeline import download_hub_checkpoint, make_hub_uploader, milestone_path
+
+    test_repo = HUB_REPO + "-test"
+    fake = WORK / "fake_ckpt"
+    shutil.rmtree(fake, ignore_errors=True)
+    fake.mkdir()
+    (fake / "meta.json").write_text(json.dumps({"step": 200}))
+    (fake / "weights.bin").write_bytes(b"0" * 1000)
+    make_hub_uploader(test_repo, True, 200)(fake, 200)
+    api = HfApi()
+    files = set(api.list_repo_files(test_repo))
+    for need in ("last/meta.json", "last/weights.bin", "milestones/step-0000200/meta.json"):
+        assert need in files, f"{need} is missing from {test_repo}: the Hub upload does not work"
+    assert api.repo_info(test_repo).private, f"{test_repo} is public"
+    newest = download_hub_checkpoint(test_repo, WORK / "dl_last")
+    milestone = download_hub_checkpoint(test_repo, WORK / "dl_milestone", milestone_path(200))
+    assert newest is not None and newest.name == "ckpt-0000200", newest
+    assert milestone is not None and (milestone / "weights.bin").exists(), milestone
+    try:
+        api.delete_repo(test_repo)
+    except Exception:
+        print("could not delete", test_repo, "- delete it by hand on the Hub, it is only a test")
+    print("OK: Hub upload, milestone copy and both downloads work")
+else:
+    print("HUB_REPO is empty: the Hub round trip was not tested. Set it to test checkpoints and milestones.")
+"""

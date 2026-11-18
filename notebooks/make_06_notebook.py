@@ -13,7 +13,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 import adapt_cells as c  # noqa: E402
 
 SETTINGS = """
-# Nothing to set here. This notebook only measures speed and memory; it writes nothing to the Hub.
+# Speed and memory are measured without the Hub. If you set HUB_REPO (a PRIVATE repo you made), the
+# notebook also tests the checkpoint and milestone upload and download on a throwaway "<repo>-test" repo.
+HUB_REPO = ""            # e.g. "your-name/zubaan-qwen3-ckpt"; empty skips the Hub test
 MICRO_BATCH = 2          # used by the in-process 5-step check only
 GRAD_CHECKPOINT = True
 PHASE_A_STEPS = 100      # unused here; the config cell shares its code with notebook 07
@@ -43,13 +45,14 @@ Each runs in its own process, so an out-of-memory error in one only marks that s
 
 **Send back `speed_report.json`** (written to the notebook's working folder), then put the winning `MICRO_BATCH` and `GRAD_CHECKPOINT` into notebook 07.
 
-Settings before running: Accelerator **GPU T4 x2** (one is used), Internet **on**, Input **Add Input > Notebooks** with the finished output of `03_extend_export_qwen3`. No Hub repo or secret is needed. About 20 minutes including data preparation.
+Settings before running: Accelerator **GPU T4 x2** (one is used), Internet **on**, Input **Add Input > Notebooks** with the finished output of `03_extend_export_qwen3`. A Hub repo and the `HF_TOKEN` secret are optional: with them the notebook also proves checkpoint and milestone upload and download work. About 20 minutes including data preparation.
 """
         ),
         c.code(SETTINGS),
         c.code(c.INSTALL.format(commit=commit)),
         c.code(c.CHECK_CODE),
         c.code(c.CHECK_GPU),
+        c.code(c.SECRET),
         c.md("## 1. Find the extended model"),
         c.code(c.FIND_MODEL),
         c.md("## 2. Configuration"),
@@ -64,7 +67,11 @@ Settings before running: Accelerator **GPU T4 x2** (one is used), Internet **on*
         c.code(c.FREE_GPU),
         c.md("## 5. The trial"),
         c.code(c.SPEED),
-        c.md("## 6. Output size"),
+        c.md(
+            "## 6. Hub round trip (only if HUB_REPO is set)\n\nUploads a stand-in checkpoint the way the main run does, checks `last/` and the milestone copy exist, downloads both, and removes the test repo."
+        ),
+        c.code(c.HUB_TEST),
+        c.md("## 7. Output size"),
         c.code(c.CLEANUP),
     ]
     return {

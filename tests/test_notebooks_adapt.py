@@ -95,15 +95,17 @@ def test_main_notebook_checks_the_hub_before_training_and_trains_ungated(nb7):
     assert not re.search(r"hf_[A-Za-z0-9]{20,}", "\n".join(cells))  # no token in code
 
 
-def test_speed_notebook_never_touches_the_hub_and_runs_the_check_first(nb6, tmp_path, monkeypatch):
+def test_speed_notebook_tests_the_hub_only_when_asked_and_runs_the_check_first(nb6, tmp_path, monkeypatch):
     cells = code_cells(nb6)
-    assert 'get_secret("HF_TOKEN")' not in "\n".join(cells)
+    test = next(c for c in cells if "make_hub_uploader" in c)
+    assert test.startswith("if HUB_REPO:") and '"-test"' in test  # skipped without a repo
+    assert "milestones/step-0000200/meta.json" in test and "download_hub_checkpoint" in test
     check = next(i for i, c in enumerate(cells) if "5 fp16 steps" in c)
     speed = next(i for i, c in enumerate(cells) if "VARIANTS = [" in c)
     assert check < speed
     a = _run_config(
         nb6, tmp_path, monkeypatch, MICRO_BATCH=2, GRAD_CHECKPOINT=True, PHASE_A_STEPS=100,
-        PHASE_B_STEPS=700, OUT_NAME="adapt_speed", HUB=None,
+        PHASE_B_STEPS=700, OUT_NAME="adapt_speed", HUB=None, HUB_REPO="",
     )  # fmt: skip
     assert a.hub_repo is None
 
