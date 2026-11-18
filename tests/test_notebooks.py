@@ -230,3 +230,17 @@ def test_notebook5_prepares_data_before_it_trains(notebook5):
     check = next(i for i, c in enumerate(cells) if "5 fp16 steps" in c)
     smoke = next(i for i, c in enumerate(cells) if "resumed_from_step" in c and "max_steps=20" in c)
     assert prepare < check < smoke
+
+
+def test_notebook5_removes_the_torchao_that_kaggle_ships_before_peft_runs(notebook5):
+    cells = code_cells(notebook5)
+    install = next(i for i, c in enumerate(cells) if 'COMMIT = "abc1234"' in c)
+    assert "pip uninstall -y -q torchao" in cells[install]
+    first_peft = next(i for i, c in enumerate(cells) if "import peft" in c or "run_adapt" in c)
+    assert install < first_peft
+
+
+def test_notebook5_check_reads_the_log_file_not_a_key_run_adapt_does_not_return(notebook5):
+    cell = next(c for c in code_cells(notebook5) if "5 fp16 steps" in c)
+    assert "train_log.jsonl" in cell and 'res["history"]' not in cell
+    from zubaan.adapt.pipeline import run_adapt  # noqa: F401  (the cell imports it)

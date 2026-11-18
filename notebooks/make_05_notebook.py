@@ -43,6 +43,9 @@ REPO = f"git+https://github.com/Hashir-Aziz123/zubaan.git@{{COMMIT}}"
 # Kaggle may already hold an older copy with the same version number, which pip keeps.
 # Force our commit (dependencies are already in place).
 !pip install -q --force-reinstall --no-deps "zubaan @ {{REPO}}"
+# Kaggle ships torchao 0.10, which peft refuses ("only versions above 0.16 are supported") when it
+# builds LoRA layers. We never use torchao, so remove it; peft then skips its torchao support.
+!pip uninstall -y -q torchao
 !zubaan version
 """
 
@@ -198,9 +201,15 @@ check = cfg.model_copy(update={
     "phase_a_steps": 2, "phase_b_steps": 3, "grad_accum": 2, "warmup_steps": 1,
     "log_every": 1, "eval_every": 5, "eval_texts": 20, "checkpoint_every": 5,
 })
-res = run_adapt(check, log=print)
-losses = [h["loss"] for h in res["history"] if "loss" in h]
+run_adapt(check, log=print)
+rows = [json.loads(line) for line in (check.output_dir / "train_log.jsonl").read_text().splitlines()]
+losses = [r["loss"] for r in rows if "loss" in r]
+# The fp16 loss scaler starts high and skips a step (gradient norm inf) when it overflows. A few at the
+# start are normal; every step skipped would mean the run is not learning.
+skipped = sum(1 for r in rows if "loss" in r and r["grad_norm"] == float("inf"))
+print(f"steps skipped by the loss scaler: {skipped} of 5")
 assert len(losses) == 5 and all(x == x and abs(x) < 1e4 for x in losses), losses
+assert skipped < 5, "every step overflowed: use precision fp32"
 print("OK: 5 fp16 steps, finite losses", [round(x, 3) for x in losses])
 """
 
@@ -232,6 +241,15 @@ from zubaan.adapt.pipeline import run_adapt
 from zubaan.config import load_config
 
 cfg = load_config("adapt.yaml").adapt
+if cfg.hub_repo:  # a smoke run must start from step 0, so clear any older smoke checkpoint
+    from huggingface_hub import HfApi
+
+    try:
+        HfApi().delete_folder("last", repo_id=cfg.hub_repo, repo_type="model")
+        print("cleared an old smoke checkpoint from", cfg.hub_repo)
+    except Exception as e:
+        print("no old smoke checkpoint to clear:", type(e).__name__)
+shutil.rmtree(cfg.output_dir / "checkpoints", ignore_errors=True)
 first = run_adapt(cfg, log=print, max_steps=20)
 assert first["final_step"] == 20 and not first["finished"]
 if cfg.hub_repo:
