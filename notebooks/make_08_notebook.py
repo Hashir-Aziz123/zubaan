@@ -81,8 +81,6 @@ DATA = """
 """
 
 DATA_CHECK = f"""
-import hashlib
-
 meta = json.loads(Path("data/urdu/urdu_meta.json").read_text())
 sha = meta["files"]["heldout"]["sha256"]
 print("held-out sha256:", sha)
@@ -150,12 +148,18 @@ Models run in float32 (as in Stage 2). The adapted model is stored as bfloat16; 
         ),
         c.code(c.INSTALL.format(commit=commit)),
         c.code(
-            c.CHECK_CODE
-            + '\nimport zubaan.adapt.evaluate  # noqa: F401  (the evaluation code is in this commit)\nprint("OK: evaluation code present")\n'
+            c.CHECK_CODE.replace(
+                "import zubaan.adapt.pipeline  # noqa: F401",
+                "import zubaan.adapt.evaluate  # noqa: F401  (evaluation code is in this commit)\n"
+                "import zubaan.adapt.pipeline  # noqa: F401",
+            )
         ),
         c.code(c.CHECK_GPU),
         c.md("## 1. Find the two local models"),
-        c.code("import json\n" + FIND_MODELS),
+        c.code(
+            "import json\nfrom pathlib import Path\n"
+            + FIND_MODELS.replace("\nfrom pathlib import Path\n", "", 1)
+        ),
         c.md("## 2. Configuration"),
         c.code("from pathlib import Path\n" + CONFIG),
         c.md("## 3. Data"),
