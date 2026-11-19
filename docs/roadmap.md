@@ -46,7 +46,9 @@ Plan and decisions: `continue.md` and `docs/decisions.md` (2026-11-18). Start fr
 - [x] Training loop with phases, fp16, NaN guard, checkpoint and resume, `zubaan adapt prepare|run` (`adapt/cpt.py`, `adapt/pipeline.py`, chunk 3); exact-resume test on a tiny model passes
 - [x] Kaggle smoke run (05), speed trial (06) and main run (07): 800 steps (100 + 700) at micro batch 1, 850 tokens/s, about 9.4 h wall time, Hub checkpoints, merged model saved (chunks 4 and 5). In-run held-out Urdu bits per character fell 2.41 (step 100) to 1.52 (step 800), English 1.21 to 1.08; not yet comparable with the Stage 2 table, see decisions
 - [x] Merge, save and verify (`adapt/finalize.py`, `zubaan adapt merge`, chunk 6): float32 merge, logits must match, old rows identical, Stage 2 folder verification. Tested on a tiny model; run at the end of notebook 07: verified, max logit difference 6.5e-05
-- [ ] Quality: bits per character on held-out Urdu, Belebele `urd_Arab`, English control; optional compute-matched control run (chunks 6 and 7)
+- [x] Quality (chunk 7, notebook 08, 2026-11-19): FLORES Urdu bits per character 2.339 (base) / 3.562 (untrained) / 1.718 (adapted), held-out Urdu 2.310 / 3.570 / 1.486, FLORES English 1.208 / 1.210 / 1.066, Belebele Urdu acc_char 0.334 / 0.253 / 0.340 (intervals overlap with the base: no detectable change). Tokens per Urdu character 0.643 to 0.281. Report section and chart still to write
+- [ ] Optional compute-matched control run (decision 6), planned for next week's quota
+- [ ] Quality report section and chart in `docs/reports/tokenizer-extension/` (from `reports/adapt_quality.json`)
 - [ ] Re-export (GGUF parity, Q4_K_M, vLLM check) and write-up (chunks 8 and 9)
 
 ## Stage 4: draft (2 to 3 weeks)

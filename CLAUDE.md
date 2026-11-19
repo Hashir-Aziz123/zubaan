@@ -21,7 +21,7 @@ The pipeline, one CLI command per stage:
 | `zubaan report tax` / `report extend` | "The Urdu language tax" and "Tokenizer extension" reports: Markdown plus charts in `docs/reports/` | 1, 2 |
 | `zubaan extend` | `learn`, `sweep`, `quality`, `run`: add target-language merges, resize and initialize embeddings, save and verify the model | 2 (done; rows untrained) |
 | `zubaan export` | `gguf` (with tokenizer parity check), `ollama`, `vllm`, `all` | 2 (done; 1.7B parity passed) |
-| `zubaan adapt` | Continued pretraining so the model learns new tokens: new rows, then LoRA, English replay (Kaggle) | 3 (in progress: data, params, loop built; runs pending) |
+| `zubaan adapt` | Continued pretraining so the model learns new tokens: new rows, then LoRA, English replay (Kaggle) | 3 (trained and evaluated; re-export and write-up pending) |
 | `zubaan draft` | Drafters sharing the extended vocabulary: distilled small model, n-gram | 4 |
 | `zubaan bench` | Benchmarks against running servers with tokenizer-fair metrics | 5 |
 
@@ -57,7 +57,8 @@ src/zubaan/
                 pipeline.py (extend run)
   export/       stage 2: gguf.py (llama.cpp commands, fingerprint), parity.py (HF vs llama.cpp ids),
                 ollama.py, vllm.py, pipeline.py (export all)
-  adapt/        stage 3: data.py (token blocks), params.py (new rows + LoRA), cpt.py (loop)
+  adapt/        stage 3: data.py (token blocks), params.py (new rows + LoRA), cpt.py (loop),
+                pipeline.py, finalize.py (merge, save, verify), evaluate.py (score model folders, checks)
   draft/        stage 4: distill.py, ngram.py (planned)
   bench/        stage 5: runner.py, quality.py (planned)
   report/       charts.py, tax.py, extension.py: Markdown reports with PNG charts

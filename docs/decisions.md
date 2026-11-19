@@ -197,3 +197,22 @@ The smoke run on a T4 gave a median 582 tokens/s at micro batch 2 with gradient 
 
 - **One protocol, three models.** `zubaan adapt eval` (`adapt/evaluate.py`, config section `evaluate`, notebook 08) scores the base model, the extended model before training and the adapted model on the same texts with their own tokenizers: 1000 texts of at most 400 characters per set (held-out Urdu, FLORES Urdu, FLORES English), all 900 Belebele questions per language, float32. The base model is rerun instead of copied from Stage 2 and must reproduce the Stage 2 numbers within 0.01 bits per character, or the notebook stops: that proves the protocol did not drift. The held-out file's hash is checked against the one Stage 2 used.
 - **Success checks are code, not prose.** `success_checks` returns PASS or FAIL for the four tests of decision 9, and says when a Belebele gain has overlapping 95% intervals (then it is reported as noise, not a gain). The English tolerance edge is inclusive with a 1e-9 float margin (a test found 1.228 - 1.208 evaluating to slightly above 0.02).
+
+## Stage 3: evaluation results (2026-11-19, notebook 08, Kaggle T4, float32, commit 8d16b47)
+
+Same texts for all three models (1000 per set, at most 400 characters; Belebele 900 questions per language). The base model reproduced its Stage 2 numbers exactly (2.310, 2.339, 1.208), and the held-out file matched Stage 2's hash.
+
+| Model | Tokens per char (Urdu) | BPC Urdu held-out | BPC Urdu FLORES | BPC English FLORES | Belebele Urdu acc_char | Belebele English acc_char |
+| --- | --- | --- | --- | --- | --- | --- |
+| Base Qwen3-1.7B | 0.643 | 2.310 | 2.339 | 1.208 | 0.334 [0.304, 0.366] | 0.447 [0.414, 0.479] |
+| Extended, untrained | 0.281 | 3.570 | 3.562 | 1.210 | 0.253 [0.226, 0.283] | 0.447 [0.414, 0.479] |
+| Extended, adapted (800 steps) | 0.281 | 1.486 | 1.718 | 1.066 | 0.340 [0.310, 0.372] | 0.459 [0.427, 0.492] |
+
+Checks (decision 9): English within tolerance PASS (1.066 vs 1.208); Urdu below untrained PASS; Urdu at or below base PASS (stretch); Belebele Urdu above base is numerically above (0.340 vs 0.334) but **the intervals overlap, so it is no detectable change, not a gain**. Belebele English is also unchanged.
+
+How to read it, and what is not shown:
+
+- **Cost and quality together.** The same Urdu text needs 2.29x fewer tokens (0.281 vs 0.643 per character) and the adapted model scores 0.62 fewer bits per character than the base on FLORES Urdu (2.339 to 1.718). FLORES Urdu is the cleaner Urdu number: the held-out Wikipedia lines come from the same dump as the training text, so they are in-domain and flatter the result.
+- **The English gain (1.208 to 1.066) is not evidence that English got better.** The likely causes are that the base is a chat model, whose raw-text likelihood is worse than a model tuned on plain text, and that the replay text is English Wikipedia, close to FLORES in style. Neither cause is tested here. What the result does show is that English was not damaged by this metric.
+- **Not attributable to the tokenizer.** The gain comes from adding 16M tokens of Urdu training, which the base never had. Whether the extended tokenizer helps or hurts quality against the same training on the base tokenizer is exactly what the compute-matched control (decision 6) answers, and it has not been run.
+- **Understanding did not improve.** Belebele Urdu is at the base level, about 0.34, with an interval of about 6 points. This is a small continued-pretraining run, so better likelihood has not turned into better multiple-choice answers. Chat and instruction behavior was not measured and may have degraded.
