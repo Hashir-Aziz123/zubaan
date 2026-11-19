@@ -216,6 +216,36 @@ class AdaptConfig(BaseModel):
     )
 
 
+class EvaluateConfig(BaseModel):
+    """Stage 3 evaluation: score saved model folders on the same texts (zubaan adapt eval).
+
+    Defaults reproduce the Stage 2 protocol (1000 texts of at most 400 characters per set, all
+    900 Belebele questions, float32), so the rows can sit next to the Stage 2 table.
+    """
+
+    models: dict[str, str] = Field(
+        description="Name -> model folder or Hub id, in table order. The first is the reference",
+    )
+    untrained: str | None = Field(
+        default=None, description="Name of the extended model before training (for the checks)"
+    )
+    adapted: str | None = Field(default=None, description="Name of the adapted model")
+    heldout: Path = Path("data/urdu/urdu_heldout.txt")
+    eval_urdu: Path = Path("data/flores_urd.txt")
+    eval_english: Path = Path("data/flores_eng.txt")
+    quality_texts: int | None = Field(default=1000, description="Texts per BPC set (None = all)")
+    max_chars: int = 400
+    belebele_questions: int | None = Field(default=None, description="Per language (None = 900)")
+    dtype: str = Field(default="float32", description="float32 | bfloat16 | float16")
+    device: str = "cuda"
+    batch_size: int = 4
+    max_batch_tokens: int = 2048
+    output: Path = Path("reports/adapt_quality.json")
+    english_tolerance: float = Field(
+        default=0.02, description="Allowed English bits per character above the reference"
+    )
+
+
 class ProjectConfig(BaseModel):
     """Top-level config file: any section may be omitted."""
 
@@ -226,6 +256,7 @@ class ProjectConfig(BaseModel):
     extend: ExtendConfig | None = None
     export: ExportConfig | None = None
     adapt: AdaptConfig | None = None
+    evaluate: EvaluateConfig | None = None
 
 
 def load_config(path: str | Path) -> ProjectConfig:

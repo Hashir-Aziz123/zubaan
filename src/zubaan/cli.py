@@ -860,6 +860,95 @@ def adapt_merge(
     console.print("Next: evaluate it, then 'zubaan export all' with model_dir pointing at it.")
 
 
+@adapt_app.command("eval")
+def adapt_eval(
+    config: Annotated[Path, typer.Option("--config", exists=True, help="YAML with evaluate:")],
+    out: Annotated[
+        Optional[Path],  # noqa: UP045
+        typer.Option(help="Results JSON (default evaluate.output); finished models resume"),
+    ] = None,
+    json_out: Annotated[bool, typer.Option("--json", help="Print the checks as JSON")] = False,
+) -> None:
+    """Score saved model folders (base, extended, adapted) on the same texts.
+
+    Bits per character on held-out Urdu, FLORES Urdu and FLORES English, plus Belebele in both
+    languages, and the stage 3 success checks when untrained and adapted are named.
+    """
+    from zubaan.adapt.evaluate import comparison_rows, run_model_eval, success_checks
+    from zubaan.audit.acceptance_lm import load_causal_lm
+    from zubaan.bench.quality import load_belebele
+    from zubaan.extend.quality_run import select_bpc_texts
+
+    cfg = _section(config, "evaluate")
+    sets = {
+        "urdu_heldout": select_bpc_texts(
+            read_lines(cfg.heldout), cfg.quality_texts, cfg.max_chars, True
+        ),
+        "urdu_flores": select_bpc_texts(
+            read_lines(cfg.eval_urdu), cfg.quality_texts, cfg.max_chars, True
+        ),
+        "english_flores": select_bpc_texts(
+            read_lines(cfg.eval_english), cfg.quality_texts, cfg.max_chars, False
+        ),
+    }
+    sets = {k: v for k, v in sets.items() if v}
+    belebele = {
+        lang: load_belebele(lang, cfg.belebele_questions) for lang in ("urd_Arab", "eng_Latn")
+    }
+    output = out or cfg.output
+    meta = run_metadata(list(cfg.models.values()))
+    meta["settings"] = {
+        "dtype": cfg.dtype,
+        "device": cfg.device,
+        "n_texts": {k: len(v) for k, v in sets.items()},
+        "belebele_questions": cfg.belebele_questions,
+        "models": cfg.models,
+    }
+    results = run_model_eval(
+        cfg.models,
+        lambda path: load_causal_lm(path, cfg.dtype, cfg.device),
+        sets,
+        belebele,
+        output,
+        device=cfg.device,
+        batch_size=cfg.batch_size,
+        max_batch_tokens=cfg.max_batch_tokens,
+        meta=meta,
+        log=(lambda s: None) if json_out else console.print,
+    )
+    checks = []
+    if cfg.untrained and cfg.adapted:
+        reference = next(iter(cfg.models))
+        checks = success_checks(
+            results, reference, cfg.untrained, cfg.adapted, cfg.english_tolerance
+        )
+    if json_out:
+        typer.echo(json.dumps({"checks": checks, "output": str(output)}, ensure_ascii=False))
+        return
+    table = Table(title="Stage 3 quality next to cost")
+    cols = ["Model", "Vocab", "Tok/char Urdu", "BPC Urdu held-out", "BPC Urdu FLORES"]
+    cols += ["BPC English", "Belebele urd", "Belebele eng"]
+    for col in cols:
+        table.add_column(col, justify="right")
+    nan = float("nan")
+    for r in comparison_rows(results):
+        table.add_row(
+            r["model"],
+            f"{r['vocab_size']:,}",
+            f"{r.get('tokens_per_char_urdu_heldout', nan):.3f}",
+            f"{r.get('bpc_urdu_heldout', nan):.3f}",
+            f"{r.get('bpc_urdu_flores', nan):.3f}",
+            f"{r.get('bpc_english_flores', nan):.3f}",
+            f"{r.get('belebele_urd_Arab_acc_char', nan):.3f}",
+            f"{r.get('belebele_eng_Latn_acc_char', nan):.3f}",
+        )
+    console.print(table)
+    for c in checks:
+        console.print(f"{'PASS' if c['passed'] else 'FAIL'}  {c['name']}: {c['detail']}")
+    console.print("Lower bits per character is better; Belebele chance is 0.25.")
+    console.print(f"Saved {output}")
+
+
 @app.command()
 def draft() -> None:
     """Build drafters that share the extended vocabulary."""

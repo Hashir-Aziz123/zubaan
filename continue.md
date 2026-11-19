@@ -1,8 +1,8 @@
-# Where we left off (end of 2026-11-18)
+# Where we left off (2026-11-19)
 
-Stages 1 and 2 are done. Stage 3 (adapt) is fully built and tested on the laptop; the smoke and speed runs passed on Kaggle; **the main run has not started**. To resume, tell Claude: "read continue.md and pick up from there".
+Stages 1 and 2 are done. Stage 3 (adapt) is fully built and tested on the laptop; the smoke, speed and **main run (notebook 07, 800 steps, about 9.4 h) finished on Kaggle** and saved a merged model (`adapted/model/`, 3.48 GB). Next is chunk 7 (evaluation). To resume, tell Claude: "read continue.md and pick up from there".
 
-## Tomorrow: start the main run (notebook 07)
+## Done 2026-11-19: main run (notebook 07). Kept for reference; the steps below were followed
 
 1. On Kaggle open Add-ons > Secrets and add a secret labelled exactly `HF_TOKEN` (a Hugging Face **write** token), with the **attached** toggle on for the notebook. The last attempt of notebook 07 stopped at the SECRET cell with "No user secrets exist ... label HF_TOKEN": the secret was not attached. Nothing else failed (T4 found, versions fine).
 2. Upload `notebooks/07_adapt_main_qwen3.ipynb` (already has `HUB_REPO = hashiraziz21/zubaan-qwen3-ckpt`, `MICRO_BATCH = 1`, `GRAD_CHECKPOINT = False`, 100 + 700 steps). Settings: GPU T4, Internet on, input = finished output of notebook 03, secret attached. Make the Hub repo private first (the notebook asserts it).
@@ -157,7 +157,7 @@ Each chunk has one deliverable, a test that can fail, and a done criterion. "Lap
 - [x] Chunks 0 and 4: notebook 05 (`check` and `smoke` modes) ran on Kaggle. Two notebook bugs were found and fixed (Kaggle's torchao 0.10 breaks peft: removed in the install cell; a `history` key `run_adapt` does not return; and a stale step-30 smoke checkpoint on the Hub: smoke now clears it). Notebook 05 is left as is
 - [x] Speed trial and checkpoint plan: notebook 06 (speed trial, optional Hub round-trip test) and notebook 07 (main run, Hub required) built from `notebooks/adapt_cells.py`, which reuses 05's cells. Checkpoint to the Hub every 50 steps, permanent copy every 200 (`<repo>/milestones/step-NNNNNNN`), upload failure warns without stopping training, `merge --milestone`
 - [x] Hub repo `hashiraziz21/zubaan-qwen3-ckpt` created (keep it private); token made. The secret is not yet attached to the Kaggle notebook (see Tomorrow)
-- [ ] Chunk 5: main run in notebook 07 (about 9 GPU hours), including chunk 6 merge, save and verify (the notebook runs `zubaan adapt merge` at the end)
+- [x] Chunk 5: main run in notebook 07 finished (800 steps, about 9.4 h wall). Chunk 6 merge ran at the end of the notebook. Merge verified (max logit diff 6.5e-05). In-run held-out Urdu bpc 2.41 (step 100) to 1.52 (step 800), English 1.21 to 1.08 on 200 texts each; must be re-measured on the Stage 2 protocol before comparing with base 2.31 / untrained 3.57 / English 1.208. Log: `reports/notebook7_logs.txt`
 - [ ] Optional compute-matched control run (decision 6) after the main run, before chunk 7
 - [ ] Chunk 7 evaluation entry point for a saved folder and the quality table; chunk 8 re-export and recheck; chunk 9 write-up (`docs/stage3-usage.md`, roadmap and CLAUDE.md stage table)
 

@@ -1,0 +1,22 @@
+# Stage 3 evaluation: score the base, extended (untrained) and adapted models on the same texts.
+#   uv run zubaan adapt eval --config configs/evaluate-qwen3-1.7b.yaml      # needs a GPU (T4)
+# Defaults follow the Stage 2 protocol so the rows sit next to the Stage 2 table. The first model
+# is the reference for deltas and for the success checks. On Kaggle, notebook 08 writes this file.
+
+evaluate:
+  models:
+    base: Qwen/Qwen3-1.7B
+    extended-untrained: outputs/qwen3-1.7b/model
+    adapted: outputs/adapted/model
+  untrained: extended-untrained
+  adapted: adapted
+  heldout: data/urdu/urdu_heldout.txt
+  eval_urdu: data/flores_urd.txt
+  eval_english: data/flores_eng.txt
+  quality_texts: 1000
+  max_chars: 400
+  belebele_questions: null     # all 900 per language
+  dtype: float32
+  device: cuda
+  output: reports/adapt_quality.json
+  english_tolerance: 0.02
