@@ -129,7 +129,7 @@ Send back `vllm_check_adapted.json`.
         code(check_gpu),
         code(SETTINGS),
         md("## 1. Find the adapted model"),
-        code("import json\n" + FIND_MODEL),
+        code("import json" + FIND_MODEL),
         md("## 2. Install vLLM (isolated environment)"),
         code(n4.INSTALL_VLLM),
         md("## 3. Generate the vLLM config and start the server"),
