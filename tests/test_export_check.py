@@ -74,6 +74,15 @@ def test_urdu_letter_share_worked_example():
     assert urdu_letter_share("123 ۔") is None
 
 
+def test_urdu_letter_share_ignores_special_tokens():
+    # Q4_K_M answer from the notebook 09 run: 30 Urdu letters, then "<|endoftext|>". Counting the
+    # marker gave 30 / (30 + 9) = 0.769; without it the share is 30 / 30 = 1.0.
+    answer = "پاکستان کا دارالحکومت اسلام آباد ہے۔<|endoftext|>"
+    assert urdu_letter_share(answer) == 1.0
+    assert urdu_letter_share("<|im_end|>") is None
+    assert urdu_letter_share("جواب</think> ok") == pytest.approx(4 / 6)
+
+
 def test_parse_kld_and_ppl():
     k = parse_kld(KLD_OUTPUT)
     assert k["mean_kld"] == {"value": 0.020981, "uncertainty": 0.001223}

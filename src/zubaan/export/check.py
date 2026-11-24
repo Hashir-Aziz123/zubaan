@@ -133,14 +133,20 @@ def strip_think(text: str) -> str:
     return re.sub(r"<think>.*", "", text, flags=re.S).strip()
 
 
+_MARKUP = re.compile(r"<\|[^|<>]*\|>|</?think>")
+
+
 def urdu_letter_share(text: str) -> float | None:
     """Share of letters that are in the Arabic Unicode block (U+0600 to U+06FF).
 
     share = arabic_block_letters / all_letters. Digits, spaces and punctuation are not letters.
-    Returns None when the text has no letters at all. A low share on an Urdu prompt means the
-    model drifted into another script; a high share says nothing about whether the text is good.
+    Special-token text such as ``<|endoftext|>`` and bare ``<think>`` tags is removed first: it is
+    printed by the runtime, not written by the model, and its Latin letters would lower the share
+    of a short Urdu answer. Returns None when the text has no letters at all. A low share on an
+    Urdu prompt means the model drifted into another script; a high share says nothing about
+    whether the text is good.
     """
-    letters = [c for c in text if c.isalpha()]
+    letters = [c for c in _MARKUP.sub("", text) if c.isalpha()]
     if not letters:
         return None
     return sum("؀" <= c <= "ۿ" for c in letters) / len(letters)
