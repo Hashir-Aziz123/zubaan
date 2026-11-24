@@ -216,3 +216,23 @@ How to read it, and what is not shown:
 - **The English gain (1.208 to 1.066) is not evidence that English got better.** The likely causes are that the base is a chat model, whose raw-text likelihood is worse than a model tuned on plain text, and that the replay text is English Wikipedia, close to FLORES in style. Neither cause is tested here. What the result does show is that English was not damaged by this metric.
 - **Not attributable to the tokenizer.** The gain comes from adding 16M tokens of Urdu training, which the base never had. Whether the extended tokenizer helps or hurts quality against the same training on the base tokenizer is exactly what the compute-matched control (decision 6) answers, and it has not been run.
 - **Understanding did not improve.** Belebele Urdu is at the base level, about 0.34, with an interval of about 6 points. This is a small continued-pretraining run, so better likelihood has not turned into better multiple-choice answers. Chat and instruction behavior was not measured and may have degraded.
+
+## Stage 3: re-export of the adapted model (2026-11-24, notebook 09, Kaggle CPU, commit 59f2708)
+
+`zubaan export all` and `zubaan export check` on the merged adapted model (notebook 07 output, step 800), llama.cpp `b12477`, 4 CPUs, no GPU, about 94 min wall. Results: `reports/export_summary_09.json` and `reports/export_check_09.json` (gitignored, local).
+
+- **Tokenizer parity passed.** 2,041 of 2,045 texts give identical ids in Hugging Face and llama.cpp; the 4 others differ only because the input is not NFC (two combining marks swap order), 0 real mismatches. Same counts as Stage 2, as expected: training does not touch the tokenizer. Pre-tokenizer recognized as `qwen2` from the fingerprint, converter not patched.
+- **Files.** Q4_K_M 1.12 GB and Q8_0 1.86 GB, both quantized with the Urdu importance matrix (200,056 characters of Urdu Wikipedia, 40 chunks of 512). The f16 file (3.5 GB) was only used for the checks and deleted.
+- **Quantization cost against f16** (llama.cpp KL-divergence mode, FLORES devtest, 20 chunks of 512 tokens). All three files share one tokenizer, so per-token numbers compare between them; they must not be compared with the base model.
+
+| Text | Quant | Mean KLD | Same top token | PPL ratio |
+| --- | --- | --- | --- | --- |
+| FLORES Urdu (f16 PPL 55.5) | Q8_0 | 0.0017 | 96.7% | 1.0036 |
+| FLORES Urdu | Q4_K_M | 0.0341 | 85.9% | 1.0247 |
+| FLORES English (f16 PPL 20.3) | Q8_0 | 0.0018 | 97.2% | 1.0033 |
+| FLORES English | Q4_K_M | 0.0320 | 89.8% | 1.0271 |
+
+  Mean KLD is about the same for both languages, so quantization does not hurt Urdu more than English. Q4_K_M keeps the top token less often on Urdu (85.9% vs 89.8%). The two perplexities are per token on different text and tokenizations, so they are not a language comparison.
+- **Generation speed** (llama-completion, greedy, 80 new tokens, 4 Kaggle CPUs): f16 about 6 tokens/s, Q8_0 about 10.5, Q4_K_M about 15. This compares the quantizations with each other on one machine only.
+- **Generated text (greedy, read by a person).** Every file answers Urdu prompts in fluent Urdu script and names Islamabad as the capital; English completion still works. Problems: repetition loops on open-ended prompts in all three files (worst in Q4_K_M, which repeats "علامہ اقبال" until the token limit) and invented facts (Islamabad's population as 21,000,000 and "largest city", 1.25 billion native Urdu speakers). With thinking allowed, the model reasons in English inside `<think>`, as base Qwen3 does. Greedy decoding on a 1.7B model makes loops more likely; sampling settings were not tested.
+- **Bug found and fixed.** The first run failed its Urdu-script check (0.769 on an answer that was entirely Urdu) because `urdu_letter_share` counted the letters of the `<|endoftext|>` text llama.cpp prints. Special-token text and `<think>` tags are now removed before counting (commit 59f2708, with a test using that exact answer). The measurements of the first run were identical to this one.
