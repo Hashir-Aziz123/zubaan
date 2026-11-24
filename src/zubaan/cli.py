@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -1014,6 +1015,34 @@ def export_all(
 ) -> None:
     """GGUF with parity check, Ollama Modelfile and vLLM config in one go."""
     _run_export_steps(config, model_dir, ("gguf", "ollama", "vllm"), json_out)
+
+
+@export_app.command("check")
+def export_check(
+    config: _EXPORT_CONFIG, model_dir: _EXPORT_MODEL = None, json_out: _EXPORT_JSON = False
+) -> None:
+    """Urdu generation samples on every GGUF and quantization cost (KL divergence vs f16)."""
+    from zubaan.export.check import run_check
+
+    # The samples are Urdu; a Windows console with a legacy code page cannot print them. Show "?"
+    # instead of stopping the run (export_check.json always holds the real text).
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(errors="replace")
+    cfg = _export_config(config, model_dir)
+    try:
+        result = run_check(cfg, log=(lambda s: None) if json_out else console.print)
+    except (FileNotFoundError, ValueError) as e:
+        raise typer.BadParameter(str(e)) from e
+    if json_out:
+        typer.echo(json.dumps(result, indent=2, ensure_ascii=False))
+        return
+    for lang, res in result["quant_cost"].items():
+        for q, k in res["quants"].items():
+            console.print(
+                f"{lang} {q}: mean KLD {k['mean_kld']['value']:.4f}, "
+                f"same top token {k['same_top_p_percent']['value']:.1f}%"
+            )
+    console.print(f"Saved {cfg.output_dir / 'export_check.json'}")
 
 
 @app.command()

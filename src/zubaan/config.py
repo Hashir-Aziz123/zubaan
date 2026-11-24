@@ -139,6 +139,17 @@ class ExportConfig(BaseModel):
     parity_workers: int = 4
     max_model_len: int = 4096
     force: bool = Field(default=False, description="Rebuild files that already exist")
+    # zubaan export check: generation samples and quantization cost (KL divergence vs f16)
+    check_urdu: Path = Field(
+        default=Path("data/flores_urd.txt"), description="Urdu text for the KL divergence check"
+    )
+    check_english: Path = Path("data/flores_eng.txt")
+    check_chunks: int = Field(default=20, ge=1, description="llama-perplexity chunks per language")
+    check_ctx: int = Field(default=512, ge=8)
+    check_n_predict: int = Field(default=80, ge=1, description="Tokens per generation sample")
+    check_scratch: Path | None = Field(
+        default=None, description="Folder for the large f16 logits file (default: in output_dir)"
+    )
 
 
 class AdaptConfig(BaseModel):
