@@ -1,30 +1,21 @@
 # Where we left off (end of 2026-11-25)
 
-Stages 1 and 2 are done. **Stage 3 is done** (training, evaluation, re-export, vLLM check, report section, write-up `docs/stage3-usage.md`). Open: the optional control run (notebook 11, guide `docs/stage3-control-run.md`) . The local Ollama test ran on 2026-11-25 (results in `docs/decisions.md`): thinking must be turned off per request. Next is Stage 4. To resume, tell Claude: "read continue.md and pick up from there".
+Stages 1, 2 and **3 are done** (stage 3 closed 2026-11-25; write-up `docs/stage3-usage.md`, results in the Stage 3 section of `docs/reports/tokenizer-extension/`). **Next is Stage 4** (drafters that share the extended vocabulary; see `docs/roadmap.md` and the "Next: stage 4 and 5" section below). To resume, tell Claude: "read continue.md and pick up from there".
 
-## Stage 3 result (details and table: `docs/decisions.md`, "evaluation results", 2026-11-19)
+Optional follow-up, any time: the Stage 3 compute-matched control run (notebook 11, guide `docs/stage3-control-run.md`, about 10 Kaggle GPU hours, needs a new private Hub repo). When its results come back, add them to `docs/decisions.md` and the report.
 
-The adapted Qwen3-1.7B (10,000 new Urdu tokens, 800 steps of new rows then LoRA, about 9.4 h on a T4, notebook 07) was scored by notebook 08 on the same texts as Stage 2 (the base model reproduced its Stage 2 numbers exactly):
+## Stage 3 result in short
 
-| | Tokens per Urdu char | BPC Urdu FLORES | BPC Urdu held-out | BPC English | Belebele Urdu acc_char |
+| | Urdu tokens/char (FLORES) | BPC Urdu FLORES | BPC Urdu held-out | BPC English | Belebele Urdu acc_char |
 | --- | --- | --- | --- | --- | --- |
-| Base | 0.643 | 2.339 | 2.310 | 1.208 | 0.334 [0.304, 0.366] |
-| Extended, untrained | 0.281 | 3.562 | 3.570 | 1.210 | 0.253 |
-| Adapted | 0.281 | 1.718 | 1.486 | 1.066 | 0.340 [0.310, 0.372] |
+| Base | 0.668 | 2.339 | 2.310 | 1.208 | 0.334 [0.304, 0.366] |
+| Extended, untrained | 0.275 | 3.562 | 3.570 | 1.210 | 0.253 |
+| Adapted | 0.275 | 1.718 | 1.486 | 1.066 | 0.340 [0.310, 0.372] |
 
-- Same Urdu text needs 2.29x fewer tokens and scores 0.62 fewer bits per character than the base on FLORES Urdu (the cleaner number; held-out is in-domain Wikipedia). English not damaged.
-- **Belebele shows no detectable change** (intervals overlap with the base; the check printed PASS only because 0.340 > 0.334). Say "no change", not "gain".
-- The English gain (1.208 to 1.066) is not evidence English improved: likely a chat model scored on plain text plus Wikipedia-like replay. Untested.
-- **The gain cannot be attributed to the tokenizer** until the compute-matched control (decision 6) runs: base tokenizer, same recipe. Not run; planned for next week's Kaggle quota. Chat and instruction behavior was not measured.
-
-## What to do next (in order)
-
-1. **Done 2026-11-25: report section and chart** (`report/adaptation.py`). Original note: add an "Adaptation" section and chart to `docs/reports/tokenizer-extension/` from `reports/adapt_quality.json` (gitignored, local; it holds the full results with intervals). Look at `report/extension.py` and `report/charts.py`; the results file has `variants` keyed `base`, `extended-untrained`, `adapted` and an `order` list. `adapt/evaluate.py` has `comparison_rows` and `success_checks` to build the table. State the caveats above in the report.
-2. **Chunk 8, re-export and recheck.** Notebooks 09 (2026-11-24) and 10 (2026-11-25, vLLM on a T4: passed, but thinking mode ends without an answer) are done, results in `docs/decisions.md`; left: the local Ollama check (serve with thinking off). Original plan: `zubaan export all` on the adapted model (`adapted/model/` in the Kaggle output of notebook 07; not downloaded locally, 3.48 GB, saved as bfloat16, load as float16 on a T4): GGUF parity (HF vs llama.cpp), Q4_K_M and Q8_0 with the Urdu imatrix, a real Urdu generation on CPU (the metrics cannot say whether the text is readable), Ollama chat sample (watch `<think>` behavior), vLLM check on a T4 (notebook 04 pattern, `dtype half`). A new notebook is needed (`make_09_notebook.py`, reuse `adapt_cells.py` and notebook 03 and 04 cells). Kaggle needs the pinned commit pushed first.
-3. **Done 2026-11-25: chunk 9 write-up** (`docs/stage3-usage.md`). Original note: `docs/stage3-usage.md`, decisions, roadmap, the stage table in `CLAUDE.md`; state the limits (small run, noisy Belebele, chat ability untested, gain not attributed to the tokenizer).
-4. **Optional control run**: notebook 11 is written (2026-11-25, `make_11_notebook.py`, design in `docs/decisions.md`); needs a push, a new private Hub repo, then a Kaggle T4 run. Original note: (about 9 GPU hours for a full match; a shortened 300 to 400 step control of about 4 h compared at the same step is possible). Matching on text instead of tokens would need over 20 h, so do not do that. Only if the quota allows.
-
-Kaggle quota: about 7 GPU hours were left on 2026-11-19 before notebook 08 used about 2 h (so about 5 h). Check before planning GPU work.
+- 2.43x fewer tokens on FLORES Urdu (2.29x on the held-out lines) and 0.62 fewer bits per character than the base. English not damaged. Belebele: no change (say "no change", not "gain").
+- Not attributed to the tokenizer until the control run. The English drop is not evidence English improved.
+- Serving: GGUF parity passed (2,041/2,045, 0 real mismatches), Q4_K_M and Q8_0, vLLM 0.34.0 on a T4, Ollama 0.40.16 on the laptop. **Thinking must be off, per request** (`think: false` in Ollama, `enable_thinking: false` in vLLM): with it on, the model usually ends its turn without an answer. Ollama ignores the Modelfile template for these GGUFs (it uses the template inside the GGUF).
+- Local files: adapted Q4_K_M and Modelfile in `outputs/adapted-export/`; Ollama model `zubaan-urdu-adapted` in `tools/ollama-models` (start the portable server with `OLLAMA_MODELS` pointing there). The merged Hugging Face model (3.48 GB) is only in notebook 07's Kaggle output.
 
 ## Stage 3 run facts
 
@@ -56,7 +47,7 @@ Learned Urdu BPE merges on cleaned Wikipedia (Arabic-block filter so English can
 
 ## Git state
 
-Everything is pushed up to the commit that carries this file. Notebooks 06 and 07 install zubaan from commit `98fb1a5`, notebook 08 from `8d16b47`. Stage 3 code: `src/zubaan/adapt/` (data, params, cpt, pipeline, finalize), CLI `zubaan adapt prepare | run | merge [--milestone STEP]`, config `AdaptConfig` (new field `milestone_every`). 488 tests pass, ruff clean. Ask before pushing.
+Notebook pins: 06 and 07 install zubaan from `98fb1a5`, 08 from `8d16b47`, 09 and 10 from `59f2708`, 11 from `ad7692d`. Stage 3 code: `src/zubaan/adapt/` (data, params, cpt, pipeline, finalize, evaluate), CLI `zubaan adapt prepare | run [--stop-at STEP] | merge [--milestone STEP] | eval`, `adapt.control` for the control run, report section in `report/adaptation.py`. 522 tests pass, ruff clean. Check `git status` and `git log origin/main..` for unpushed commits; ask before pushing.
 
 ## Files you have locally (gitignored)
 

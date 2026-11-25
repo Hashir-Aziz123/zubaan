@@ -273,3 +273,10 @@ Q4_K_M from notebook 09 (`qwen3-1.7b-urdu-adapted-Q4_K_M.gguf`), Ollama 0.40.16 
 - **Speed:** 9 to 13 tokens per second on the laptop CPU, per token of the extended tokenizer.
 - **Not tested:** the base model in the same setup, so how much of the thinking failure stage 3 caused is not measured; sampling instead of greedy decoding, which usually reduces repetition loops.
 
+## Stage 3 closed (2026-11-25)
+
+Stage 3 is closed with the four goals met (Urdu quality past the base on bits per character, token saving kept, English not damaged, model served by llama.cpp, Ollama and vLLM) and three known limits stated in `docs/stage3-usage.md` (no Belebele gain, degraded chat and thinking behavior, gain not yet attributed to the tokenizer).
+
+- **The control run is a follow-up, not a blocker.** It costs about 10 of the weekly 30 Kaggle GPU hours, and Stage 4 does not depend on its outcome: the drafter must share the adapted model's vocabulary whatever the control shows. It stays ready (notebook 11) and its result will be added to the report and decisions when run.
+- **The adapted model is the Stage 4 and 5 target, served with thinking off.** Its in-domain quality is what speculative decoding acceptance depends on; chat polish is not needed for those measurements.
+

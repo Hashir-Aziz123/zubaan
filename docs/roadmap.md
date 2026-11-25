@@ -38,6 +38,8 @@ Each stage ends with something usable and public. Estimates assume part-time wor
 
 ## Stage 3: adapt (2 to 3 weeks)
 
+**Done (closed 2026-11-25).** Write-up: `docs/stage3-usage.md`; results: the Stage 3 section of the extension report. The control run below is an optional follow-up, not part of closing the stage.
+
 Plan and decisions: `continue.md` and `docs/decisions.md` (2026-11-18). Start from the extended Qwen3-1.7B, train the 10,000 new rows then LoRA, Urdu Wikipedia plus 10% English Wikipedia, fp16 on a Kaggle T4, private Hub checkpoints.
 
 - [x] Environment check: versions install together, fp16 LoRA steps stable on a T4 (notebook 05 `check` and `smoke`, chunk 0)
@@ -47,12 +49,15 @@ Plan and decisions: `continue.md` and `docs/decisions.md` (2026-11-18). Start fr
 - [x] Kaggle smoke run (05), speed trial (06) and main run (07): 800 steps (100 + 700) at micro batch 1, 850 tokens/s, about 9.4 h wall time, Hub checkpoints, merged model saved (chunks 4 and 5). In-run held-out Urdu bits per character fell 2.41 (step 100) to 1.52 (step 800), English 1.21 to 1.08; not yet comparable with the Stage 2 table, see decisions
 - [x] Merge, save and verify (`adapt/finalize.py`, `zubaan adapt merge`, chunk 6): float32 merge, logits must match, old rows identical, Stage 2 folder verification. Tested on a tiny model; run at the end of notebook 07: verified, max logit difference 6.5e-05
 - [x] Quality (chunk 7, notebook 08, 2026-11-19): FLORES Urdu bits per character 2.339 (base) / 3.562 (untrained) / 1.718 (adapted), held-out Urdu 2.310 / 3.570 / 1.486, FLORES English 1.208 / 1.210 / 1.066, Belebele Urdu acc_char 0.334 / 0.253 / 0.340 (intervals overlap with the base: no detectable change). Tokens per Urdu character 0.643 to 0.281 (held-out)
-- [ ] Optional compute-matched control run (decision 6): code, config and notebook 11 done (2026-11-25, guide `docs/stage3-control-run.md`); Kaggle run pending
 - [x] Quality report section and chart in `docs/reports/tokenizer-extension/` (`report/adaptation.py`, 2026-11-25): table, success checks, derived reading, serving results
 - [x] Re-export (chunk 8, notebook 09, 2026-11-24): GGUF parity 2,041/2,045 (4 NFC-only, 0 real), Q4_K_M and Q8_0 with the Urdu imatrix, quantization cost on Urdu about the same as on English
 - [x] vLLM check (chunk 8, notebook 10, 2026-11-25): tokenization identical, Urdu completion and chat work with thinking off; with thinking allowed the model ends inside `<think>` with no answer
 - [x] Local Ollama chat check with the adapted Q4_K_M file (2026-11-25, Ollama 0.40.16, laptop CPU): with thinking on 1 of 4 prompts answered, with `think: false` 4 of 4; Ollama uses the GGUF's embedded template, so thinking is turned off per request
 - [x] Write-up (chunk 9): `docs/stage3-usage.md`, CLAUDE.md stage table (2026-11-25)
+
+Optional follow-up:
+
+- [ ] Compute-matched control run (decision 6): base model with its own tokenizer, same recipe and token count. Code, config and notebook 11 are ready (guide `docs/stage3-control-run.md`); needs about 10 Kaggle GPU hours. It is the only way to attribute the quality gain to the tokenizer.
 
 ## Stage 4: draft (2 to 3 weeks)
 

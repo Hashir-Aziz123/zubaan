@@ -11,6 +11,25 @@ Stage 2 made Urdu cheaper: 10,000 new Urdu tokens cut the token cost of Urdu on 
 
 Status (2026-11-25): **Stage 3 is done.** Training, evaluation, re-export, the vLLM check, the local Ollama check and the report are complete. The optional compute-matched control run (notebook 11) is written but not run.
 
+## The verdict
+
+Stage 3 asked four questions. Each has an answer from a measurement:
+
+| Question | Answer |
+| --- | --- |
+| Does Urdu quality recover after training the new tokens? | **Yes, past the base.** FLORES Urdu bits per character 2.339 (base), 3.562 (untrained), 1.718 (adapted). |
+| Is the token saving kept? | **Yes.** The same FLORES Urdu text takes 2.43x fewer tokens than with the base tokenizer. |
+| Is English damaged? | **No.** English bits per character did not rise (1.208 to 1.066), and English tokenizes byte for byte as before. |
+| Does the trained model still run in real tools? | **Yes.** GGUF parity passed, Q4_K_M and Q8_0 work in llama.cpp, vLLM serves it, Ollama runs it. |
+
+Three things did not go well, and none of them was a goal of this stage:
+
+- **Reading comprehension did not improve** (Belebele Urdu 34.0% against 33.4%, within noise).
+- **Chat behavior degraded.** With thinking on, the model usually ends its turn without an answer; it also invents facts and loops on open-ended prompts. This was expected from training a chat model on plain text (decision of 2026-11-18).
+- **The gain is not yet attributed to the tokenizer.** The optional control run answers that.
+
+So the adapted model is fit for what comes next (Stage 4 and 5 use it as the target model for speculative decoding and benchmarks, with thinking off), and not fit to present as a chat assistant.
+
 ## What Stage 3 did, and how
 
 **Why training is needed.** A transformer reads a token through its embedding row and predicts through the output head row; Qwen3-1.7B uses one tied matrix for both. After Stage 2, the 10,000 new rows were the mean of the embeddings of the pieces each token replaces. The layers above had never seen these tokens in context, so held-out Urdu bits per character rose from 2.31 to 3.57 and Belebele Urdu fell to chance.
