@@ -132,7 +132,9 @@ def _reading(adapt: dict) -> str:
     return "\n".join(out)
 
 
-def _serving(export: dict | None, check: dict | None, vllm: dict | None) -> str:
+def _serving(
+    export: dict | None, check: dict | None, vllm: dict | None, ollama: dict | None = None
+) -> str:
     parts = []
     gguf = (export or {}).get("gguf")
     if gguf:
@@ -206,6 +208,8 @@ def _serving(export: dict | None, check: dict | None, vllm: dict | None) -> str:
                 "thinking off."
             )
         parts.append(text)
+    if ollama:
+        parts.append(_ollama_paragraph(ollama))
     if not parts:
         return ""
     parts.append(
@@ -216,6 +220,30 @@ def _serving(export: dict | None, check: dict | None, vllm: dict | None) -> str:
         "continued-pretraining run, not a source of facts."
     )
     return "### Serving the adapted model\n\n" + "\n\n".join(parts) + "\n"
+
+
+def _ollama_paragraph(ollama: dict) -> str:
+    """Answered prompts with thinking on and off, from the local Ollama check."""
+    runs = ollama["runs"]
+
+    def answered(mode: str) -> tuple[int, int]:
+        rows = [r for r in runs if r["mode"] == mode]
+        return sum(r["answered"] for r in rows), len(rows)
+
+    on, n_on = answered("default_thinking_on")
+    off, n_off = answered("think_false")
+    speeds = [r["tokens_per_s"] for r in runs if r.get("tokens_per_s")]
+    loops = sum(1 for r in runs if r["mode"] == "think_false" and r["done_reason"] == "length")
+    return (
+        f"**Ollama** {ollama['ollama']} on a laptop CPU (Q4_K_M, {ollama['decoding']}): with "
+        f"thinking on (Ollama's default) the model answered **{on} of {n_on}** prompts; the "
+        "others ended after the reasoning with no answer. With `think: false` it answered "
+        f"{off} of {n_off}"
+        + (f", and {loops} of them ran to the token limit" if loops else "")
+        + f". {min(speeds):.0f} to {max(speeds):.0f} tokens per second. Ollama used the chat "
+        "template embedded in the GGUF, not the Modelfile's, so thinking has to be turned off "
+        "per request (`think: false`, or `ollama run --think=false`)."
+    )
 
 
 def _reproduced(adapt: dict, stage2_base: dict | None) -> str:
@@ -240,6 +268,7 @@ def adaptation_section(
     check: dict | None = None,
     vllm: dict | None = None,
     stage2_base: dict | None = None,
+    ollama: dict | None = None,
 ) -> str:
     """The stage 3 section as Markdown (the chart is ``adaptation_quality.png``)."""
     check_adapt_results(adapt)
@@ -273,4 +302,4 @@ Success checks set before training (`docs/decisions.md`):
 
 {_reading(adapt)}
 
-{_serving(export, check, vllm)}"""
+{_serving(export, check, vllm, ollama)}"""

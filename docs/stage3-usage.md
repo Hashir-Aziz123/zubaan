@@ -6,10 +6,10 @@ Stage 2 made Urdu cheaper: 10,000 new Urdu tokens cut the token cost of Urdu on 
 
 - Belebele Urdu (reading comprehension) did not measurably change.
 - The gain has not yet been attributed to the tokenizer. The compute-matched control (notebook 11) answers that, and it has not been run.
-- Chat behavior degraded. With thinking on, the model can end its turn inside `<think>` without answering. Serve it with thinking off.
+- Chat behavior degraded. With thinking on, the model often ends its turn after its reasoning without answering (3 of 4 prompts in Ollama). Serve it with thinking off, which has to be set per request.
 - It invents facts and falls into repetition loops on open-ended prompts.
 
-Status (2026-11-25): training, evaluation, re-export, the vLLM check and the report are done. Two things are open: the optional control run (notebook 11, written, not run) and the local Ollama chat test of the adapted Q4_K_M file. The no-think Modelfile it needs is written and was tested on Ollama with the 0.6B model.
+Status (2026-11-25): **Stage 3 is done.** Training, evaluation, re-export, the vLLM check, the local Ollama check and the report are complete. The optional compute-matched control run (notebook 11) is written but not run.
 
 ## What Stage 3 did, and how
 
@@ -91,27 +91,34 @@ uv run zubaan report extend
 
 ## Serving the adapted model
 
-Use **thinking off** everywhere. With thinking allowed, the vLLM check got an English reasoning block, then the end of the turn with no closing tag and no answer (one greedy sample). Training a chat model on plain text taught it to end documents. With thinking off, the same question got a direct answer in Urdu.
+Use **thinking off** everywhere. With thinking on, the model writes an English reasoning block and then often ends its turn with no answer: once in the vLLM check, and on 3 of 4 prompts in the Ollama check, including an English one. Training a chat model on plain text taught it to end documents. With thinking off, every prompt got an answer.
 
 **llama.cpp.** Notebook 09 wrote `qwen3-1.7b-urdu-adapted-Q4_K_M.gguf` (1.12 GB) and `Q8_0` (1.86 GB), both quantized with an importance matrix from Urdu text. Tokenizer parity passed: 2,041 of 2,045 texts give identical ids, the other 4 differ only because the text is not in NFC form, and none differ for real. Send NFC-normalized text (`zubaan.text.normalize_urdu` does this). On 4 Kaggle CPU threads, Q4_K_M generated about 15 tokens/s.
 
-**Ollama.** Set `ollama_no_think: true` in the export config, or write the Modelfile directly:
-
-```python
-from pathlib import Path
-from zubaan.export.ollama import modelfile_text, write_modelfile
-
-write_modelfile(Path("Modelfile"), modelfile_text("qwen3-1.7b-urdu-adapted-Q4_K_M.gguf", no_think=True))
-```
-
-This opens every reply with an empty `<think>\n\n</think>\n\n` block, as Qwen3's own template does with `enable_thinking=False`. Ollama 0.40.16 accepted it and answered without a think block (tested on the 0.6B GGUF). Put the GGUF next to the Modelfile, then:
+**Ollama.** Put the GGUF next to the Modelfile that `zubaan export ollama` writes, then turn thinking off **per request**:
 
 ```bash
 ollama create zubaan-urdu -f Modelfile
-ollama run zubaan-urdu "پاکستان کا دارالحکومت کیا ہے؟"
+ollama run zubaan-urdu --think=false "پاکستان کا دارالحکومت کیا ہے؟"
 ```
 
-The Modelfile for the adapted model is already written to `outputs/adapted-export/Modelfile` (gitignored). The GGUF has to be downloaded from notebook 09's Kaggle output into that folder first.
+```bash
+curl http://localhost:11434/api/chat -d '{"model": "zubaan-urdu", "think": false,
+  "messages": [{"role": "user", "content": "پاکستان کا دارالحکومت کیا ہے؟"}]}'
+```
+
+A Modelfile cannot do this. Ollama 0.40.16 ignored the Modelfile's `TEMPLATE` for this GGUF and used the Qwen3 chat template embedded in the file (`/api/show` lists it, with the `thinking` capability). It also rejects `PARAMETER think`. With thinking on, Ollama returns the reasoning in a separate `thinking` field, so a reply that ends after thinking looks like an empty answer.
+
+Measured on the 8 GB laptop's CPU (Ollama 0.40.16, Q4_K_M, greedy, 300 tokens at most; replies in `reports/ollama_check_adapted.json`), with `think: false`:
+
+| Prompt | Reply |
+| --- | --- |
+| "What is the capital of Pakistan?" (Urdu) | "The capital of Pakistan is Islamabad." in Urdu, 8 tokens |
+| "Which province is Lahore in?" (Urdu) | Punjab, and that Lahore is its capital, in Urdu: correct |
+| "Write three sentences about the Urdu language." (Urdu) | Fluent Urdu with false claims (the most spoken language in the world), then one sentence repeated until the 300-token limit |
+| "What is the capital of France?" (English) | "The capital of France is Paris." |
+
+Speed was 9 to 13 tokens per second. With thinking on, the capital, Lahore and France prompts ended after the thinking with no answer, and the thinking for Lahore placed it in "the state of Punjab in northern India". The base model was not run through Ollama, so this test does not show how much of the thinking failure is new.
 
 **vLLM.** `zubaan export vllm` writes a config with `dtype: half` (T4 has no BF16). vLLM 0.34.0 served the adapted model on a T4, and its token ids matched `tokenizer.json`. Turn thinking off per request:
 
@@ -136,4 +143,4 @@ The Modelfile for the adapted model is already written to `outputs/adapted-expor
 - The gain is not attributed to the tokenizer. The adapted model saw 16M tokens of Urdu that the base never saw; notebook 11 trains the base on the same budget.
 - Chat and instruction behavior were not measured systematically. What was seen: thinking mode can end without an answer, repetition loops on open-ended prompts, and invented facts (for example Islamabad called the largest city, and inconsistent population figures). All of it comes from greedy samples read by a person.
 - Belebele zero-shot is coarse for a 1.7B model, and only Wikipedia Urdu (formal register) was used for training.
-- The Ollama chat test of the adapted Q4_K_M file has not been run on this machine yet.
+- Thinking mode is broken in practice: it must be turned off per request in Ollama and vLLM. The base model was not put through the same chat test, so how much of this is new is not measured.

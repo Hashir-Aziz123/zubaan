@@ -309,6 +309,9 @@ def report_extend(
     adapted_vllm: Annotated[
         Path, typer.Option(help="Stage 3: vLLM check of the adapted model")
     ] = Path("reports/vllm_check_adapted.json"),
+    adapted_ollama: Annotated[
+        Path, typer.Option(help="Stage 3: local Ollama chat check of the adapted model")
+    ] = Path("reports/ollama_check_adapted.json"),
     out: Annotated[Path, typer.Option(help="Report directory")] = Path(
         "docs/reports/tokenizer-extension"
     ),
@@ -325,13 +328,14 @@ def report_extend(
         (adapted_export, "stage 3 GGUF part"),
         (adapted_check, "stage 3 quantization part"),
         (adapted_vllm, "stage 3 vLLM part"),
+        (adapted_ollama, "stage 3 Ollama part"),
     ]:
         if not f.exists():
             console.print(f"[yellow]{f} not found; the {what} is left out.[/]")
     try:
         path = build_extension_report(
             sweep, quality, out, export_summary, adapt_quality, adapted_export, adapted_check,
-            adapted_vllm,
+            adapted_vllm, adapted_ollama,
         )  # fmt: skip
     except ValueError as e:
         raise typer.BadParameter(str(e)) from e

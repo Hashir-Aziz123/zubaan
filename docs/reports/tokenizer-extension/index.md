@@ -141,6 +141,8 @@ Success checks set before training (`docs/decisions.md`):
 
 **vLLM** 0.34.0 on a Tesla T4 (`dtype half`): passed; tokenization identical to `tokenizer.json` on 5 test texts, and an Urdu chat question with thinking off gets an answer in Urdu script. **With thinking allowed, the model wrote an English reasoning block and ended the turn inside it, with no closing tag and no answer** (one greedy sample). Training the chat model on plain text taught it to end documents; serve it with thinking off.
 
+**Ollama** 0.40.16 on a laptop CPU (Q4_K_M, greedy (temperature 0), num_predict 300): with thinking on (Ollama's default) the model answered **1 of 4** prompts; the others ended after the reasoning with no answer. With `think: false` it answered 4 of 4, and 1 of them ran to the token limit. 9 to 13 tokens per second. Ollama used the chat template embedded in the GGUF, not the Modelfile's, so thinking has to be turned off per request (`think: false`, or `ollama run --think=false`).
+
 **Generated text, read by a person** (greedy decoding, details in `docs/decisions.md`): fluent Urdu that answers simple questions, but with repetition loops on open-ended prompts and invented facts (for example Islamabad called the largest city, and inconsistent population figures). This is a 1.7B model after a small continued-pretraining run, not a source of facts.
 
 ## Limitations

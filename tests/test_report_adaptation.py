@@ -142,3 +142,23 @@ def test_chart_is_written(adapt, tmp_path):
     variants = {**adapt["variants"], "control": adapt["variants"]["base"]}
     with pytest.raises(ValueError, match="no chart color"):
         adaptation_quality_chart(variants, ["base", "control"], tmp_path / "b.png")
+
+
+def test_ollama_paragraph_counts_answers_per_mode(adapt):
+    def run(mode, answered, reason="stop"):
+        return {"mode": mode, "answered": answered, "done_reason": reason, "tokens_per_s": 10.0}
+
+    ollama = {
+        "ollama": "0.40.16",
+        "decoding": "greedy",
+        "runs": [
+            run("default_thinking_on", False),
+            run("default_thinking_on", True, "length"),
+            run("think_false", True),
+            run("think_false", True, "length"),
+        ],
+    }
+    md = adaptation_section(adapt, ollama=ollama)
+    assert "answered **1 of 2** prompts" in md
+    assert "With `think: false` it answered 2 of 2, and 1 of them ran to the token limit" in md
+    assert "think=false" in md

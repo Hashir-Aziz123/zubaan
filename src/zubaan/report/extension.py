@@ -172,6 +172,7 @@ def build_extension_markdown(
     adapted_export: dict | None = None,
     adapted_check: dict | None = None,
     adapted_vllm: dict | None = None,
+    adapted_ollama: dict | None = None,
 ) -> str:
     """The full report as Markdown. Chart images are referenced by relative file name.
 
@@ -197,7 +198,12 @@ def build_extension_markdown(
     if adapt:
         summary.append(adaptation_summary(adapt))
         adapt_text = adaptation_section(
-            adapt, adapted_export, adapted_check, adapted_vllm, stage2_base=variants["base"]
+            adapt,
+            adapted_export,
+            adapted_check,
+            adapted_vllm,
+            stage2_base=variants["base"],
+            ollama=adapted_ollama,
         )
         first_limit = (
             "- The stage 2 rows are untrained; the stage 3 section shows the trained model. It "
@@ -341,6 +347,7 @@ def build_extension_report(
     adapted_export_path: Path | None = None,
     adapted_check_path: Path | None = None,
     adapted_vllm_path: Path | None = None,
+    adapted_ollama_path: Path | None = None,
 ) -> Path:
     """Write ``index.md`` and its charts into ``out_dir``. Missing optional files are skipped."""
     from zubaan.report import charts
@@ -372,6 +379,7 @@ def build_extension_report(
         load_json(adapted_export_path),
         load_json(adapted_check_path),
         load_json(adapted_vllm_path),
+        load_json(adapted_ollama_path),
     )
     path = out_dir / "index.md"
     with path.open("w", encoding="utf-8", newline="\n") as f:

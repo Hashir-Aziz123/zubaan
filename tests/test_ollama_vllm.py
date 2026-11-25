@@ -97,12 +97,3 @@ def test_write_vllm_files(tmp_path):
     script = paths["script"].read_text(encoding="utf-8")
     assert script.startswith("#!/bin/sh\n") and "--tokenizer outputs/model" in script
     assert b"\r" not in paths["script"].read_bytes()
-
-
-def test_modelfile_no_think_opens_replies_with_an_empty_think_block():
-    plain = modelfile_text("m.gguf")
-    off = modelfile_text("m.gguf", no_think=True)
-    assert "<think>" not in plain
-    # Exactly Qwen3's assistant prefix with enable_thinking=False, once, after the prefix.
-    assert off.count("<|im_start|>assistant\n<think>\n\n</think>\n\n") == 1
-    assert off.replace("<think>\n\n</think>\n\n", "") == plain

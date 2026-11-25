@@ -1,6 +1,6 @@
 # Where we left off (end of 2026-11-25)
 
-Stages 1 and 2 are done. **Stage 3 is done** (training, evaluation, re-export, vLLM check, report section, write-up `docs/stage3-usage.md`). Open: the optional control run (notebook 11, guide `docs/stage3-control-run.md`) and the local Ollama test of the adapted Q4_K_M file (Modelfile with thinking off already in `outputs/adapted-export/`). Next is Stage 4. To resume, tell Claude: "read continue.md and pick up from there".
+Stages 1 and 2 are done. **Stage 3 is done** (training, evaluation, re-export, vLLM check, report section, write-up `docs/stage3-usage.md`). Open: the optional control run (notebook 11, guide `docs/stage3-control-run.md`) . The local Ollama test ran on 2026-11-25 (results in `docs/decisions.md`): thinking must be turned off per request. Next is Stage 4. To resume, tell Claude: "read continue.md and pick up from there".
 
 ## Stage 3 result (details and table: `docs/decisions.md`, "evaluation results", 2026-11-19)
 
@@ -183,7 +183,7 @@ Each chunk has one deliverable, a test that can fail, and a done criterion. "Lap
 - [x] Chunk 7 report section and chart in `docs/reports/tokenizer-extension/` (2026-11-25)
 - [x] Chunk 8 part 1: notebook 09 re-export on Kaggle CPU (2026-11-24): parity 2041/2045 (4 NFC-only, 0 real), Q4_K_M and Q8_0, quantization cost and samples recorded in `docs/decisions.md`. Files: `reports/export_summary_09.json`, `reports/export_check_09.json`
 - [x] Chunk 8 part 2a: notebook 10 vLLM check on a T4 (2026-11-25): tokenization 5/5 identical, Urdu completion and chat (thinking off) work; with thinking allowed the model ends inside `<think>` with no answer. File: `reports/vllm_check_adapted.json`
-- [ ] Chunk 8 part 2b: local Ollama chat check with the Q4_K_M file. The no-think Modelfile is written to `outputs/adapted-export/Modelfile`; put the GGUF next to it, `ollama create` and chat (download `export/qwen3-1.7b-urdu-adapted-Q4_K_M.gguf` and `export/Modelfile` from notebook 09's output)
+- [x] Chunk 8 part 2b: local Ollama chat check (2026-11-25): with thinking on 1 of 4 prompts answered, with `think: false` 4 of 4. GGUF and Modelfile in `outputs/adapted-export/`, Ollama model `zubaan-urdu-adapted` in `tools/ollama-models`
 - [x] Chunk 9 write-up (`docs/stage3-usage.md`, roadmap and CLAUDE.md stage table), 2026-11-25
 
 ## Order

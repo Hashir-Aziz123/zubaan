@@ -181,9 +181,7 @@ def run_export(
         file = quants.get("Q4_K_M") or next(iter(quants.values()), None) or gguf.get("f16")
         if not file:
             raise ValueError("no GGUF file to point the Modelfile at; run the gguf step first")
-        text = modelfile_text(
-            file, tuple(stops), num_ctx=cfg.max_model_len, no_think=cfg.ollama_no_think
-        )
+        text = modelfile_text(file, tuple(stops), num_ctx=cfg.max_model_len)
         path = write_modelfile(cfg.output_dir / "Modelfile", text)
         summary["ollama"] = {"modelfile": path.name, "gguf": file, "stop_token_ids": stops}
         log(f"wrote {path}")

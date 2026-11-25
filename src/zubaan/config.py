@@ -138,11 +138,6 @@ class ExportConfig(BaseModel):
     max_parity_texts: int | None = Field(default=None, description="Per language (None = all)")
     parity_workers: int = 4
     max_model_len: int = 4096
-    ollama_no_think: bool = Field(
-        default=False,
-        description="Modelfile opens every reply with an empty <think> block (thinking off); "
-        "use for the stage 3 adapted model",
-    )
     force: bool = Field(default=False, description="Rebuild files that already exist")
     # zubaan export check: generation samples and quantization cost (KL divergence vs f16)
     check_urdu: Path = Field(

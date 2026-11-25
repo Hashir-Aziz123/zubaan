@@ -51,8 +51,7 @@ Plan and decisions: `continue.md` and `docs/decisions.md` (2026-11-18). Start fr
 - [x] Quality report section and chart in `docs/reports/tokenizer-extension/` (`report/adaptation.py`, 2026-11-25): table, success checks, derived reading, serving results
 - [x] Re-export (chunk 8, notebook 09, 2026-11-24): GGUF parity 2,041/2,045 (4 NFC-only, 0 real), Q4_K_M and Q8_0 with the Urdu imatrix, quantization cost on Urdu about the same as on English
 - [x] vLLM check (chunk 8, notebook 10, 2026-11-25): tokenization identical, Urdu completion and chat work with thinking off; with thinking allowed the model ends inside `<think>` with no answer
-- [x] Ollama Modelfile with thinking off (`ollama_no_think`, 2026-11-25): accepted by Ollama 0.40.16, reply without a think block (tested on the 0.6B GGUF)
-- [ ] Local Ollama chat check with the adapted Q4_K_M file: Modelfile written to `outputs/adapted-export/`; needs the GGUF downloaded from notebook 09's output
+- [x] Local Ollama chat check with the adapted Q4_K_M file (2026-11-25, Ollama 0.40.16, laptop CPU): with thinking on 1 of 4 prompts answered, with `think: false` 4 of 4; Ollama uses the GGUF's embedded template, so thinking is turned off per request
 - [x] Write-up (chunk 9): `docs/stage3-usage.md`, CLAUDE.md stage table (2026-11-25)
 
 ## Stage 4: draft (2 to 3 weeks)
