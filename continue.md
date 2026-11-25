@@ -1,6 +1,6 @@
-# Where we left off (end of 2026-11-19)
+# Where we left off (end of 2026-11-25)
 
-Stages 1 and 2 are done. **Stage 3 training and quality evaluation are done**; what is left is the report section, the re-export and recheck (chunk 8) and the write-up (chunk 9), plus an optional control run next week. To resume, tell Claude: "read continue.md and pick up from there".
+Stages 1 and 2 are done. **Stage 3 is done** (training, evaluation, re-export, vLLM check, report section, write-up `docs/stage3-usage.md`). Open: the optional control run (notebook 11, guide `docs/stage3-control-run.md`) and the local Ollama test of the adapted Q4_K_M file (Modelfile with thinking off already in `outputs/adapted-export/`). Next is Stage 4. To resume, tell Claude: "read continue.md and pick up from there".
 
 ## Stage 3 result (details and table: `docs/decisions.md`, "evaluation results", 2026-11-19)
 
@@ -19,9 +19,9 @@ The adapted Qwen3-1.7B (10,000 new Urdu tokens, 800 steps of new rows then LoRA,
 
 ## What to do next (in order)
 
-1. **Report section and chart** (last part of chunk 7, laptop only): add an "Adaptation" section and chart to `docs/reports/tokenizer-extension/` from `reports/adapt_quality.json` (gitignored, local; it holds the full results with intervals). Look at `report/extension.py` and `report/charts.py`; the results file has `variants` keyed `base`, `extended-untrained`, `adapted` and an `order` list. `adapt/evaluate.py` has `comparison_rows` and `success_checks` to build the table. State the caveats above in the report.
+1. **Done 2026-11-25: report section and chart** (`report/adaptation.py`). Original note: add an "Adaptation" section and chart to `docs/reports/tokenizer-extension/` from `reports/adapt_quality.json` (gitignored, local; it holds the full results with intervals). Look at `report/extension.py` and `report/charts.py`; the results file has `variants` keyed `base`, `extended-untrained`, `adapted` and an `order` list. `adapt/evaluate.py` has `comparison_rows` and `success_checks` to build the table. State the caveats above in the report.
 2. **Chunk 8, re-export and recheck.** Notebooks 09 (2026-11-24) and 10 (2026-11-25, vLLM on a T4: passed, but thinking mode ends without an answer) are done, results in `docs/decisions.md`; left: the local Ollama check (serve with thinking off). Original plan: `zubaan export all` on the adapted model (`adapted/model/` in the Kaggle output of notebook 07; not downloaded locally, 3.48 GB, saved as bfloat16, load as float16 on a T4): GGUF parity (HF vs llama.cpp), Q4_K_M and Q8_0 with the Urdu imatrix, a real Urdu generation on CPU (the metrics cannot say whether the text is readable), Ollama chat sample (watch `<think>` behavior), vLLM check on a T4 (notebook 04 pattern, `dtype half`). A new notebook is needed (`make_09_notebook.py`, reuse `adapt_cells.py` and notebook 03 and 04 cells). Kaggle needs the pinned commit pushed first.
-3. **Chunk 9, write-up:** `docs/stage3-usage.md`, decisions, roadmap, the stage table in `CLAUDE.md`; state the limits (small run, noisy Belebele, chat ability untested, gain not attributed to the tokenizer).
+3. **Done 2026-11-25: chunk 9 write-up** (`docs/stage3-usage.md`). Original note: `docs/stage3-usage.md`, decisions, roadmap, the stage table in `CLAUDE.md`; state the limits (small run, noisy Belebele, chat ability untested, gain not attributed to the tokenizer).
 4. **Optional control run**: notebook 11 is written (2026-11-25, `make_11_notebook.py`, design in `docs/decisions.md`); needs a push, a new private Hub repo, then a Kaggle T4 run. Original note: (about 9 GPU hours for a full match; a shortened 300 to 400 step control of about 4 h compared at the same step is possible). Matching on text instead of tokens would need over 20 h, so do not do that. Only if the quota allows.
 
 Kaggle quota: about 7 GPU hours were left on 2026-11-19 before notebook 08 used about 2 h (so about 5 h). Check before planning GPU work.
@@ -180,11 +180,11 @@ Each chunk has one deliverable, a test that can fail, and a done criterion. "Lap
 - [x] Chunk 5: main run in notebook 07 finished (800 steps, about 9.4 h wall). Chunk 6 merge ran at the end of the notebook. Merge verified (max logit diff 6.5e-05). In-run held-out Urdu bpc 2.41 (step 100) to 1.52 (step 800), English 1.21 to 1.08 on 200 texts each; must be re-measured on the Stage 2 protocol before comparing with base 2.31 / untrained 3.57 / English 1.208. Log: `reports/notebook7_logs.txt`
 - [ ] Optional compute-matched control run (decision 6): code and notebook 11 done (2026-11-25); Kaggle run pending
 - [x] Chunk 7 evaluation: `zubaan adapt eval`, notebook 08 run on Kaggle (2026-11-19), results in `docs/decisions.md`
-- [ ] Chunk 7 report section and chart in `docs/reports/tokenizer-extension/`
+- [x] Chunk 7 report section and chart in `docs/reports/tokenizer-extension/` (2026-11-25)
 - [x] Chunk 8 part 1: notebook 09 re-export on Kaggle CPU (2026-11-24): parity 2041/2045 (4 NFC-only, 0 real), Q4_K_M and Q8_0, quantization cost and samples recorded in `docs/decisions.md`. Files: `reports/export_summary_09.json`, `reports/export_check_09.json`
 - [x] Chunk 8 part 2a: notebook 10 vLLM check on a T4 (2026-11-25): tokenization 5/5 identical, Urdu completion and chat (thinking off) work; with thinking allowed the model ends inside `<think>` with no answer. File: `reports/vllm_check_adapted.json`
-- [ ] Chunk 8 part 2b: local Ollama chat check with the Q4_K_M file (download `export/qwen3-1.7b-urdu-adapted-Q4_K_M.gguf` and `export/Modelfile` from notebook 09's output)
-- [ ] Chunk 9 write-up (`docs/stage3-usage.md`, roadmap and CLAUDE.md stage table)
+- [ ] Chunk 8 part 2b: local Ollama chat check with the Q4_K_M file. The no-think Modelfile is written to `outputs/adapted-export/Modelfile`; put the GGUF next to it, `ollama create` and chat (download `export/qwen3-1.7b-urdu-adapted-Q4_K_M.gguf` and `export/Modelfile` from notebook 09's output)
+- [x] Chunk 9 write-up (`docs/stage3-usage.md`, roadmap and CLAUDE.md stage table), 2026-11-25
 
 ## Order
 

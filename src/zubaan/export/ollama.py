@@ -5,7 +5,11 @@ must be real tokens of the extended vocabulary at their original ids, so they ar
 against the tokenizer before the file is written: a stop string that is not a single token
 would never end generation.
 
-Qwen3 can start a reply with a ``<think>`` block. This Modelfile does not suppress it.
+Qwen3 can start a reply with a ``<think>`` block. By default this Modelfile does not suppress it.
+With ``no_think`` the template starts every reply with an empty ``<think>\\n\\n</think>\\n\\n``
+block, which is what Qwen3's own chat template does with ``enable_thinking=False``. Use it for
+the stage 3 adapted model: with thinking allowed it ended its turn inside ``<think>`` without an
+answer (vLLM check, notebook 10).
 """
 
 from __future__ import annotations
@@ -24,6 +28,19 @@ CHATML_TEMPLATE = """{{- range $i, $_ := .Messages }}
 <|im_start|>assistant
 {{ end }}
 {{- end }}"""
+
+# The assistant prefix Qwen3's template writes when thinking is turned off.
+EMPTY_THINK = "<think>\n\n</think>\n\n"
+
+
+def chatml_template(no_think: bool = False) -> str:
+    """The ChatML template, optionally opening every reply with an empty think block."""
+    if not no_think:
+        return CHATML_TEMPLATE
+    prefix = "<|im_start|>assistant\n"
+    if CHATML_TEMPLATE.count(prefix) != 1:  # pragma: no cover - guards a future template edit
+        raise ValueError("the ChatML template must contain the assistant prefix exactly once")
+    return CHATML_TEMPLATE.replace(prefix, prefix + EMPTY_THINK)
 
 
 def check_stop_tokens(tokenizer_json: dict, base: dict, stops: Sequence[str]) -> dict[str, int]:
@@ -53,13 +70,14 @@ def modelfile_text(
     top_p: float = 0.8,
     top_k: int = 20,
     system: str | None = None,
+    no_think: bool = False,
 ) -> str:
     """Text of a Modelfile for the GGUF file ``gguf_name`` (a path relative to the Modelfile)."""
     if not gguf_name.endswith(".gguf"):
         raise ValueError("gguf_name must end with .gguf")
     if num_ctx < 256:
         raise ValueError("num_ctx must be at least 256")
-    lines = [f"FROM ./{gguf_name}", "", f'TEMPLATE """{CHATML_TEMPLATE}"""', ""]
+    lines = [f"FROM ./{gguf_name}", "", f'TEMPLATE """{chatml_template(no_think)}"""', ""]
     if system:
         if '"""' in system:
             raise ValueError("system prompt must not contain triple quotes")
