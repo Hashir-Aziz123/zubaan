@@ -14,6 +14,10 @@ Checks before it reports success:
 * the Stage 2 folder verification passes (only vocabulary and merges changed in the tokenizer,
   English tokenizes as before, Urdu round-trips, embedding rows match the vocabulary);
 * the old embedding rows (every id below ``first_new_id``) are identical to the extended model.
+
+A control run (base model, LoRA only) has no new rows: every embedding row must be identical to
+the base, the tokenizer files are copied unchanged and checked, and the metadata goes to
+``zubaan_adapt.json`` instead, so tools that look for an extended model never pick it up.
 """
 
 from __future__ import annotations
@@ -33,6 +37,7 @@ from zubaan.io import read_lines
 WEIGHT_SUFFIXES = (".safetensors", ".bin", ".pt")
 SKIP_COPY = {"config.json", "model.safetensors.index.json", METADATA_FILE}
 CHAT_FILES = ("tokenizer_config.json", "special_tokens_map.json", "generation_config.json")
+CONTROL_METADATA_FILE = "zubaan_adapt.json"
 
 
 def copy_support_files(src: Path, dst: Path) -> list[str]:
@@ -89,19 +94,24 @@ def merge_and_save(
     if ckpt is None:
         raise FileNotFoundError(f"no checkpoint in {ckpt_root}; run 'zubaan adapt run' first")
     out = out_dir or cfg.output_dir / "model"
-    info = json.loads((cfg.model_path / METADATA_FILE).read_text(encoding="utf-8"))
-    first_new_id = cfg.first_new_id or info["first_new_id"]
+    from zubaan.adapt.pipeline import model_info
+
+    info, first_new_id = model_info(cfg)
 
     log(f"Merging {ckpt.name} into {cfg.model_path} (float32)")
     model = AutoModelForCausalLM.from_pretrained(cfg.model_path, dtype=torch.float32)
-    original_rows = model.get_input_embeddings().weight[:first_new_id].detach().clone()
     peft_model, handle = prepare_for_training(model, first_new_id, cfg)
+    n_old = handle.first_new_id  # every row in a control run
+    original_rows = model.get_input_embeddings().weight[:n_old].detach().clone()
     step = load_checkpoint(ckpt, peft_model, handle, restore_state=False)
     peft_model.eval()
 
-    probe = torch.arange(first_new_id - 8, first_new_id + 24).clamp(
-        max=first_new_id + handle.n_new - 1
-    )[None]
+    if cfg.control:
+        probe = torch.arange(1000, 1032).clamp(max=n_old - 1)[None]
+    else:
+        probe = torch.arange(first_new_id - 8, first_new_id + 24).clamp(
+            max=first_new_id + handle.n_new - 1
+        )[None]
     with torch.no_grad():
         before = peft_model(input_ids=probe).logits
     plain = merge_lora(peft_model)
@@ -111,9 +121,7 @@ def merge_and_save(
     max_diff = float((before - after).abs().max())
     if max_diff > 1e-3:
         raise ValueError(f"merging changed the logits by {max_diff:.2e}; refusing to save")
-    old_identical = bool(
-        torch.equal(plain.get_input_embeddings().weight[:first_new_id], original_rows)
-    )
+    old_identical = bool(torch.equal(plain.get_input_embeddings().weight[:n_old], original_rows))
     if not old_identical:
         raise ValueError("old embedding rows changed during training; refusing to save")
 
@@ -124,6 +132,8 @@ def merge_and_save(
     out.mkdir(parents=True)
     plain.save_pretrained(out, safe_serialization=True)
     copied = copy_support_files(cfg.model_path, out)
+    if cfg.control:
+        return _finish_control(cfg, out, ckpt, step, max_diff, copied, n_old, log)
     fetched = (
         ensure_chat_files(out, info.get("base_model", ""), log) if info.get("base_model") else []
     )
@@ -157,4 +167,47 @@ def merge_and_save(
         json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n"
     )
     log(f"Saved the merged model to {out} (step {step}, max logit difference {max_diff:.1e})")
+    return {"model_dir": str(out), "step": step, "verified": verified, "metadata": meta}
+
+
+def _finish_control(
+    cfg: AdaptConfig,
+    out: Path,
+    ckpt: Path,
+    step: int,
+    max_diff: float,
+    copied: list[str],
+    rows: int,
+    log: Callable[[str], None],
+) -> dict:
+    """Check and describe a merged control model: same tokenizer and row count as the base."""
+    for name in ("tokenizer.json", "tokenizer_config.json"):
+        src, dst = cfg.model_path / name, out / name
+        if src.exists() and src.read_bytes() != dst.read_bytes():
+            raise ValueError(f"{name} differs from the base model's; refusing to report success")
+    if saved_embedding_rows(out) != rows:
+        raise ValueError("saved embedding has a different number of rows than the base model")
+    meta = {
+        "control": True,
+        "trained": True,
+        "base_model_path": str(cfg.model_path),
+        "note": "Control run (decision 6): base model and tokenizer, LoRA trained in stage 3 and "
+        "merged into the weights. No new tokens.",
+        "stage3": {
+            "checkpoint": ckpt.name,
+            "step": step,
+            "lora_rank": cfg.lora_rank,
+            "lora_alpha": cfg.lora_alpha,
+            "precision": cfg.precision,
+            "english_replay_ratio": cfg.english_replay_ratio,
+            "merge_max_logit_diff": max_diff,
+            "saved_dtype": cfg.merged_dtype,
+            "support_files_copied": copied,
+        },
+    }
+    (out / CONTROL_METADATA_FILE).write_text(
+        json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n"
+    )
+    log(f"Saved the merged control model to {out} (step {step}, max logit diff {max_diff:.1e})")
+    verified = {"tokenizer_identical_to_base": True, "embedding_rows": rows}
     return {"model_dir": str(out), "step": step, "verified": verified, "metadata": meta}

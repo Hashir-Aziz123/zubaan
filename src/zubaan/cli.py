@@ -795,17 +795,27 @@ def adapt_run(
         Optional[int],  # noqa: UP045
         typer.Option(help="Stop after this many steps (smoke runs); default is the full schedule"),
     ] = None,
+    stop_at: Annotated[
+        Optional[int],  # noqa: UP045
+        typer.Option(help="Stop when this global step is reached (a later run can continue)"),
+    ] = None,
     json_out: Annotated[bool, typer.Option("--json", help="Print the summary as JSON")] = False,
 ) -> None:
     """Train the new embedding rows, then LoRA plus the new rows. Needs a GPU for real models.
 
+    With adapt.control the base model trains LoRA only (the compute-matched control run).
     Writes checkpoints under <output_dir>/checkpoints, resumes from the newest one (or from the
     private Hub repo adapt.hub_repo) and logs to <output_dir>/train_log.jsonl.
     """
     from zubaan.adapt.pipeline import run_adapt
 
     cfg = _adapt_config(config, model_path)
-    summary = run_adapt(cfg, log=(lambda s: None) if json_out else console.print, max_steps=steps)
+    summary = run_adapt(
+        cfg,
+        log=(lambda s: None) if json_out else console.print,
+        max_steps=steps,
+        stop_at_step=stop_at,
+    )
     if json_out:
         typer.echo(json.dumps(summary, indent=2, ensure_ascii=False))
         return

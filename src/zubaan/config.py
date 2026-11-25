@@ -179,6 +179,13 @@ class AdaptConfig(BaseModel):
     drop_overlaps: bool = Field(
         default=True, description="Drop training lines that overlap evaluation text (else raise)"
     )
+    control: bool = Field(
+        default=False,
+        description=(
+            "Control run (decision 6): model_path is the BASE model with its own tokenizer, "
+            "no new rows, LoRA only (phase_a_steps must be 0)"
+        ),
+    )
     data_dir: Path = Field(default=Path("data/adapt"), description="Token blocks go here")
     block_size: int = 1024
     english_replay_ratio: float = Field(default=0.1, description="Share of English blocks")

@@ -155,3 +155,80 @@ def test_main_notebook_uses_the_speed_trial_winner_and_limits_fragmentation(nb7)
     settings = code_cells(nb7)[0]
     assert "MICRO_BATCH = 1 " in settings and "GRAD_CHECKPOINT = False" in settings
     assert "expandable_segments:True" in settings
+
+
+# notebook 11: the compute-matched control run ----------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def nb11():
+    return _load("make_11_notebook").build("abc1234")
+
+
+CONTROL_SETTINGS = {
+    "MICRO_BATCH": 1, "GRAD_CHECKPOINT": False, "PHASE_A_STEPS": 0, "PHASE_B_STEPS": 800,
+    "OUT_NAME": "control", "HUB": "me/control",
+}  # fmt: skip
+
+
+def test_control_cells_compile_and_pin_the_commit(nb11):
+    cells = code_cells(nb11)
+    assert any('COMMIT = "abc1234"' in c for c in cells)
+    assert any("pip uninstall -y -q torchao" in c for c in cells)
+    for i, src in enumerate(cells):
+        py = "\n".join(re.sub(r"^(\s*)!.*", r"\1pass", line) for line in src.splitlines())
+        compile(py, f"cell {i}", "exec")
+    assert not re.search(r"hf_[A-Za-z0-9]{20,}", "\n".join(cells))  # no token in code
+
+
+def test_control_config_matches_the_main_run_except_what_decision_6_changes(
+    nb7, nb11, tmp_path, monkeypatch
+):
+    main = _run_config(nb7, tmp_path, monkeypatch, **MAIN_SETTINGS)
+    ctl = _run_config(nb11, tmp_path, monkeypatch, **CONTROL_SETTINGS)
+    assert ctl.control and not main.control
+    assert ctl.phase_a_steps == 0
+    # Same number of tokens: 800 steps of 32 blocks of 1,024 tokens in both runs.
+    assert ctl.phase_b_steps == main.phase_a_steps + main.phase_b_steps == 800
+    assert ctl.micro_batch_size * ctl.grad_accum == main.micro_batch_size * main.grad_accum == 32
+    same = (
+        "block_size", "english_replay_ratio", "lr_lora", "warmup_steps", "min_lr_ratio",
+        "lora_rank", "lora_alpha", "lora_dropout", "precision", "seed", "micro_batch_size",
+        "gradient_checkpointing", "eval_every", "eval_texts", "heldout", "urdu_corpus",
+        "guard_urdu", "guard_english", "checkpoint_every", "milestone_every",
+    )  # fmt: skip
+    for k in same:
+        assert getattr(ctl, k) == getattr(main, k), k
+    assert ctl.data_dir != main.data_dir and ctl.output_dir.name == "control"
+    assert ctl.english_mb == 20 and ctl.hub_repo == "me/control"
+
+
+def test_control_settings_refuse_a_missing_repo_or_a_bad_stop(nb11):
+    settings = code_cells(nb11)[0]
+    with pytest.raises(AssertionError, match="HUB_REPO"):
+        exec(settings, {})
+    ok = settings.replace('HUB_REPO = ""', 'HUB_REPO = "a/b"')
+    exec(ok, {})
+    with pytest.raises(AssertionError):
+        exec(ok.replace("STOP_AT_STEP = None ", "STOP_AT_STEP = 900 "), {})
+
+
+def test_control_notebook_order_and_guards(nb11):
+    cells = code_cells(nb11)
+    idx = {
+        name: next(i for i, c in enumerate(cells) if key in c)
+        for name, key in [
+            ("base", "snapshot_download(BASE"),
+            ("data", "!zubaan adapt prepare"),
+            ("check", "5 fp16 LoRA steps"),
+            ("hub", "_preflight"),
+            ("train", "stop_at_step=STOP_AT_STEP"),
+            ("merge", "!zubaan adapt merge"),
+            ("eval", "!zubaan adapt eval"),
+        ]
+    }
+    order = ["base", "data", "check", "hub", "train", "merge", "eval"]
+    assert [idx[n] for n in order] == sorted(idx.values())
+    assert "main-run checkpoint" in cells[idx["hub"]]  # never resumes the main run's repo
+    assert "hours_used >" in cells[idx["eval"]]  # skipped when the 12 h limit is near
+    assert 'MODEL_DIR = Path("/tmp/' in cells[idx["base"]]  # base weights are not saved as output

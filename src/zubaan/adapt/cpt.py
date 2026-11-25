@@ -9,7 +9,8 @@ the same run bit for bit on CPU.
 
 Phases (decision of 2026-11-18): steps ``0 .. phase_a_steps - 1`` train only the new rows; the
 following ``phase_b_steps`` train the LoRA adapters and the new rows. Each phase has its own
-learning rate schedule: linear warmup, then cosine decay to ``min_lr_ratio`` of the peak.
+learning rate schedule: linear warmup, then cosine decay to ``min_lr_ratio`` of the peak. The
+control run (base model, no new rows) has no phase A and trains LoRA alone.
 
 Torch is imported inside the functions that need it.
 """
@@ -29,6 +30,7 @@ from zubaan.adapt.params import (
     apply_lora,
     attach_new_rows,
     lora_parameters,
+    no_new_rows,
     set_phase,
 )
 from zubaan.config import AdaptConfig
@@ -65,14 +67,17 @@ def phase_at(step: int, cfg: AdaptConfig) -> tuple[str, int, int]:
     return "B", step - cfg.phase_a_steps, cfg.phase_b_steps
 
 
-def prepare_for_training(model, first_new_id: int, cfg: AdaptConfig):
-    """Attach the new-row parameter and LoRA to a loaded model. Returns ``(model, handle)``."""
+def prepare_for_training(model, first_new_id: int | None, cfg: AdaptConfig):
+    """Attach the new-row parameter and LoRA to a loaded model. Returns ``(model, handle)``.
+
+    ``first_new_id`` None means the control run: no new rows, LoRA only, starting in phase B.
+    """
     if cfg.gradient_checkpointing:
         model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
     model.config.use_cache = False
-    handle = attach_new_rows(model, first_new_id)
+    handle = no_new_rows(model) if first_new_id is None else attach_new_rows(model, first_new_id)
     peft_model = apply_lora(model, cfg.lora_rank, cfg.lora_alpha, cfg.lora_dropout)
-    set_phase(peft_model, handle, "A")
+    set_phase(peft_model, handle, "A" if handle.new_rows is not None else "B")
     return peft_model, handle
 
 
@@ -84,9 +89,11 @@ def build_optimizer(model, handle: AdaptHandle, cfg: AdaptConfig):
     """
     import torch
 
-    groups = [
-        {"params": [handle.new_rows], "lr": cfg.lr_new_rows, "weight_decay": 0.0, "name": "new"},
-    ]
+    groups = []
+    if handle.new_rows is not None:
+        groups.append(
+            {"params": [handle.new_rows], "lr": cfg.lr_new_rows, "weight_decay": 0.0, "name": "new"}
+        )
     lora = lora_parameters(model)
     if lora:
         groups.append(
@@ -128,7 +135,8 @@ def save_checkpoint(
     if tmp.exists():
         shutil.rmtree(tmp)
     tmp.mkdir()
-    torch.save(handle.new_rows.detach().cpu(), tmp / "new_rows.pt")
+    if handle.new_rows is not None:  # a control run has none
+        torch.save(handle.new_rows.detach().cpu(), tmp / "new_rows.pt")
     torch.save(
         {k: v.detach().cpu() for k, v in get_peft_model_state_dict(model).items()},
         tmp / "lora.pt",
@@ -178,8 +186,16 @@ def load_checkpoint(
     from peft import set_peft_model_state_dict
 
     meta = json.loads((path / "meta.json").read_text(encoding="utf-8"))
-    with torch.no_grad():
-        handle.new_rows.copy_(torch.load(path / "new_rows.pt"))
+    has_rows = (path / "new_rows.pt").exists()
+    if has_rows != (handle.new_rows is not None):
+        raise ValueError(
+            f"checkpoint {path.name} {'has' if has_rows else 'has no'} trained new rows but this "
+            f"model {'has none' if has_rows else 'has them'}: a control checkpoint and a main-run "
+            "checkpoint cannot be mixed"
+        )
+    if has_rows:
+        with torch.no_grad():
+            handle.new_rows.copy_(torch.load(path / "new_rows.pt"))
     set_peft_model_state_dict(model, torch.load(path / "lora.pt"))
     if restore_state:
         trainer = torch.load(path / "trainer.pt", weights_only=False)
@@ -295,11 +311,13 @@ def train(
 
         if done % cfg.log_every == 0 or done == stop:
             dt = max(time.time() - t0, 1e-9)
+            lrs = {g["name"]: g["lr"] for g in optimizer.param_groups}
             row = {
                 "step": done,
                 "phase": phase,
                 "loss": loss_sum,
-                "lr_new": optimizer.param_groups[0]["lr"],
+                "lr_new": lrs.get("new"),
+                "lr_lora": lrs.get("lora"),
                 "grad_norm": grad_norm,
                 "epoch": sampler.epoch_of(done * batch_blocks),
                 "tokens_per_s": tokens_since / dt,

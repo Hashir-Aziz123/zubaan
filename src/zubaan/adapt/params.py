@@ -17,6 +17,9 @@ The model's own weights and state_dict are never touched during training. ``merg
 writes the trained rows back into the tied matrix and removes the hooks, so the saved folder is
 an ordinary Hugging Face model. Logits for the old tokens are unchanged by construction.
 
+The control run (decision 6) trains the base model with its own tokenizer: there are no new rows,
+so ``no_new_rows`` returns an empty handle and only LoRA trains (phase B only).
+
 Torch and peft are imported inside the functions that need them.
 """
 
@@ -32,7 +35,7 @@ LORA_TARGETS = ("q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", 
 class AdaptHandle:
     """The trainable new rows plus the hooks that apply them to a model."""
 
-    new_rows: object  # torch.nn.Parameter, shape (n_new, hidden), float32
+    new_rows: object | None  # torch.nn.Parameter (n_new, hidden), float32; None in a control run
     first_new_id: int
     n_new: int
     hooks: list = field(default_factory=list)
@@ -88,6 +91,12 @@ def attach_new_rows(model, first_new_id: int) -> AdaptHandle:
     return handle
 
 
+def no_new_rows(model) -> AdaptHandle:
+    """An empty handle for the control run: the base model keeps every row, nothing is hooked."""
+    rows = model.get_input_embeddings().weight.shape[0]
+    return AdaptHandle(None, rows, 0)
+
+
 def apply_lora(
     model,
     rank: int = 64,
@@ -118,19 +127,23 @@ def set_phase(model, handle: AdaptHandle, phase: str) -> dict:
     """Choose what trains. Phase ``A``: only the new rows. Phase ``B``: new rows and LoRA.
 
     Everything else is frozen. Returns the number of trainable values per group so callers (and
-    tests) can check it against the hand calculation ``n_new x hidden``.
+    tests) can check it against the hand calculation ``n_new x hidden``. A handle without new rows
+    (control run) has no phase A: phase B then trains LoRA alone.
     """
     if phase not in ("A", "B"):
         raise ValueError("phase must be 'A' or 'B'")
+    if phase == "A" and handle.new_rows is None:
+        raise ValueError("this model has no new rows, so there is no phase A; set phase_a_steps: 0")
     for p in model.parameters():
         p.requires_grad_(False)
-    handle.new_rows.requires_grad_(True)
+    if handle.new_rows is not None:
+        handle.new_rows.requires_grad_(True)
     lora = lora_parameters(model)
     for p in lora:
         p.requires_grad_(phase == "B")
     return {
         "phase": phase,
-        "new_rows": handle.new_rows.numel(),
+        "new_rows": handle.new_rows.numel() if handle.new_rows is not None else 0,
         "lora": sum(p.numel() for p in lora) if phase == "B" else 0,
     }
 
@@ -144,6 +157,8 @@ def merge_new_rows(model, handle: AdaptHandle) -> None:
     import torch
 
     handle.remove_hooks()
+    if handle.new_rows is None:  # control run: nothing to write back
+        return
     emb = model.get_input_embeddings()
     head = model.get_output_embeddings()
     if head is None or head.weight.data_ptr() != emb.weight.data_ptr():

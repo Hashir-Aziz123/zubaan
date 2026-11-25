@@ -45,8 +45,36 @@ def _guard_texts(files: list[Path], belebele_lang: str | None) -> list[str]:
     return texts
 
 
+def model_info(cfg: AdaptConfig) -> tuple[dict, int | None]:
+    """The model folder's zubaan metadata and the first new token id (None in a control run).
+
+    A main run needs an extended folder (it holds ``zubaan_extension.json``); a control run needs
+    the base model and refuses an extended one, so the two can never be swapped by accident.
+    """
+    meta_path = cfg.model_path / METADATA_FILE
+    if cfg.control:
+        if meta_path.exists():
+            raise ValueError(
+                f"control: true but {cfg.model_path} is an extended model ({METADATA_FILE} "
+                "found); the control run trains the base model with its own tokenizer"
+            )
+        if cfg.phase_a_steps != 0:
+            raise ValueError("a control run has no new rows to train: set phase_a_steps: 0")
+        return {}, None
+    if not meta_path.exists():
+        raise FileNotFoundError(
+            f"{meta_path} not found: model_path must be a folder from 'zubaan extend run' "
+            "(for the base-model control run set control: true)"
+        )
+    info = json.loads(meta_path.read_text(encoding="utf-8"))
+    return info, cfg.first_new_id or info["first_new_id"]
+
+
 def run_prepare(cfg: AdaptConfig, log: Callable[[str], None] = print) -> dict:
-    """Tokenize the Urdu and English text with the extended tokenizer and write token blocks."""
+    """Tokenize the Urdu and English text with the model's tokenizer and write token blocks.
+
+    That is the extended tokenizer in a main run and the base tokenizer in a control run.
+    """
     from tokenizers import Tokenizer
 
     from zubaan.extend.quality_run import context_id
@@ -54,6 +82,7 @@ def run_prepare(cfg: AdaptConfig, log: Callable[[str], None] = print) -> dict:
     tok_path = cfg.model_path / "tokenizer.json"
     if not tok_path.exists():
         raise FileNotFoundError(f"{tok_path} not found; run 'zubaan extend run' first")
+    _, first_new_id = model_info(cfg)
     tokenizer = Tokenizer.from_file(str(tok_path))
     eos_id = context_id(json.loads(tok_path.read_text(encoding="utf-8")))
 
@@ -78,7 +107,6 @@ def run_prepare(cfg: AdaptConfig, log: Callable[[str], None] = print) -> dict:
     urdu_lines = read_lines(cfg.urdu_corpus)
     log(f"{len(urdu_lines):,} Urdu lines, {len(english_lines):,} English lines")
 
-    info = json.loads((cfg.model_path / METADATA_FILE).read_text(encoding="utf-8"))
     meta = prepare_blocks(
         urdu_lines,
         english_lines,
@@ -90,7 +118,8 @@ def run_prepare(cfg: AdaptConfig, log: Callable[[str], None] = print) -> dict:
         english_eval_texts=english_eval,
         extra_meta={
             "tokenizer_sha256": _sha256_file(tok_path),
-            "first_new_id": info["first_new_id"],
+            "first_new_id": first_new_id,
+            "control": cfg.control,
             "urdu_corpus": str(cfg.urdu_corpus),
             "english_corpus": str(cfg.english_corpus),
         },
@@ -199,6 +228,7 @@ RESUME_FIELDS = (
     "lr_new_rows",
     "lr_lora",
     "precision",
+    "control",
 )
 
 
@@ -210,10 +240,13 @@ def check_resume_compatible(ckpt: Path, cfg: AdaptConfig) -> None:
     """
     saved = json.loads((ckpt / "meta.json").read_text(encoding="utf-8"))["config"]
     now = json.loads(cfg.model_dump_json())
+    # A field added after a checkpoint was written counts as its default (``control`` is False
+    # for the main run's checkpoints).
+    default = {k: AdaptConfig.model_fields[k].default for k in RESUME_FIELDS}
     diffs = [
-        f"{k}: saved {saved.get(k)!r}, now {now[k]!r}"
+        f"{k}: saved {saved.get(k, default[k])!r}, now {now[k]!r}"
         for k in RESUME_FIELDS
-        if saved.get(k) != now[k]
+        if saved.get(k, default[k]) != now[k]
     ]
     if diffs:
         raise ValueError(
@@ -261,12 +294,16 @@ def run_adapt(
     model_factory: Callable[[], object] | None = None,
     uploader: Callable[[Path, int], None] | None = None,
     downloader: Callable[[Path], Path | None] | None = None,
+    stop_at_step: int | None = None,
 ) -> dict:
     """Train: load the extended model, attach the new rows and LoRA, run, checkpoint, resume.
 
+    In a control run (``cfg.control``) the model is the base model and only LoRA trains.
     ``model_factory`` replaces loading from ``cfg.model_path`` (used by tests). ``max_steps``
-    stops after that many steps (smoke runs). If ``hub_repo`` is set, checkpoints are pushed to
-    that private repo and a checkpoint found there is used to resume when none exists locally.
+    stops after that many steps (smoke runs); ``stop_at_step`` stops when that global step is
+    reached, wherever the run resumed (a shortened run that a later session can extend). If
+    ``hub_repo`` is set, checkpoints are pushed to that private repo and a checkpoint found there
+    is used to resume when none exists locally.
     """
     import torch
     from tokenizers import Tokenizer
@@ -280,8 +317,9 @@ def run_adapt(
     )
     from zubaan.extend.quality_run import context_id
 
-    info = json.loads((cfg.model_path / METADATA_FILE).read_text(encoding="utf-8"))
-    first_new_id = cfg.first_new_id or info["first_new_id"]
+    if max_steps is not None and stop_at_step is not None:
+        raise ValueError("give max_steps or stop_at_step, not both")
+    info, first_new_id = model_info(cfg)
     if info.get("trained"):
         log("Warning: this model folder is already marked trained; continuing from it.")
 
@@ -291,6 +329,11 @@ def run_adapt(
         raise ValueError(
             "the token blocks were made with a different tokenizer than the model folder; "
             "run 'zubaan adapt prepare' again"
+        )
+    if bool(data_meta.get("control", False)) != cfg.control:
+        raise ValueError(
+            "the token blocks were prepared for a "
+            f"{'control' if data_meta.get('control') else 'main'} run; run 'zubaan adapt prepare'"
         )
     if data_meta["block_size"] != cfg.block_size:
         raise ValueError(
@@ -336,6 +379,8 @@ def run_adapt(
             start = load_checkpoint(ckpt, peft_model, handle, optimizer, scaler)
             log(f"Resumed from {ckpt.name} (step {start})")
 
+    if stop_at_step is not None:
+        max_steps = max(0, stop_at_step - start)
     tokenizer = Tokenizer.from_file(str(tok_path))
     ctx = context_id(json.loads(tok_path.read_text(encoding="utf-8")))
     eval_fn = make_eval_fn(cfg, tokenizer, ctx, device)
@@ -356,6 +401,7 @@ def run_adapt(
     )
     summary = {
         "model_path": str(cfg.model_path),
+        "control": cfg.control,
         "first_new_id": first_new_id,
         "resumed_from_step": start,
         "final_step": result["final_step"],

@@ -1,0 +1,47 @@
+# Stage 3 control run (decision 6): base Qwen3-1.7B with its own tokenizer, the main run's recipe,
+# the same 800 steps x 32 blocks x 1,024 tokens. Answers whether the adapted model's gain comes
+# from the extended tokenizer or only from the extra Urdu training.
+#   uv run zubaan adapt prepare --config configs/adapt-control-qwen3-1.7b.yaml
+#   uv run zubaan adapt run --config configs/adapt-control-qwen3-1.7b.yaml [--stop-at 400]   # T4
+#   uv run zubaan adapt merge --config configs/adapt-control-qwen3-1.7b.yaml
+# On Kaggle, notebooks/11_adapt_control_qwen3.ipynb downloads the base model and sets the paths.
+
+adapt:
+  model_path: outputs/qwen3-1.7b-base   # a local download of Qwen/Qwen3-1.7B (not an extended folder)
+  control: true
+  urdu_corpus: data/urdu/urdu_train.txt
+  heldout: data/urdu/urdu_heldout.txt
+  english_corpus: data/english/english_replay.txt
+  english_mb: 20          # the base tokenizer gives about 2.3x more Urdu blocks; 10% English needs more text
+  guard_urdu: [data/flores_urd.txt, data/flores_dev/flores_urd.txt]
+  guard_english: [data/flores_eng.txt, data/flores_dev/flores_eng.txt]
+  guard_belebele: true
+  drop_overlaps: true
+  data_dir: data/adapt_control
+  block_size: 1024
+  english_replay_ratio: 0.1
+
+  output_dir: outputs/control
+  phase_a_steps: 0        # no new rows
+  phase_b_steps: 800      # LoRA only; the main run's 100 + 700 steps
+  micro_batch_size: 1
+  grad_accum: 32
+  lr_lora: 2.0e-4
+  warmup_steps: 50
+  lora_rank: 64
+  lora_alpha: 128
+  lora_dropout: 0.05
+  precision: fp16
+  gradient_checkpointing: false
+  device: cuda
+  seed: 0
+
+  log_every: 10
+  eval_every: 100
+  eval_texts: 200
+  checkpoint_every: 50
+  keep_checkpoints: 2
+  milestone_every: 200
+  resume: true
+  hub_repo: null          # a NEW private repo, never the main run's
+  hub_private: true

@@ -206,3 +206,24 @@ def test_merging_lora_keeps_the_logits(peft_model):
     assert torch.allclose(logits(plain, x), before, atol=1e-4)
     names = [n for n, _ in plain.named_parameters()]
     assert not any("lora_" in n for n in names)  # a plain model again
+
+
+# control run (decision 6): base model, no new rows -----------------------------------------------
+
+
+def test_control_handle_has_no_rows_no_hooks_and_no_phase_a(model):
+    pytest.importorskip("peft")
+    from zubaan.adapt.params import apply_lora, lora_parameters, no_new_rows
+
+    x = ids([1, 5, 52, 59, 7, 50])
+    before = logits(model, x)
+    handle = no_new_rows(model)
+    assert handle.new_rows is None and handle.n_new == 0 and handle.first_new_id == ROWS
+    assert handle.hooks == []
+    pm = apply_lora(model, rank=4, alpha=8, dropout=0.0)
+    with pytest.raises(ValueError, match="phase_a_steps: 0"):
+        set_phase(pm, handle, "A")
+    b = set_phase(pm, handle, "B")
+    assert b["new_rows"] == 0 and b["lora"] == sum(p.numel() for p in lora_parameters(pm)) > 0
+    assert torch.equal(logits(pm, x), before)  # LoRA B starts at zero: same function
+    merge_new_rows(pm, handle)  # nothing to write back, must not fail

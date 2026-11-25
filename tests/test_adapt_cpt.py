@@ -383,3 +383,123 @@ def test_a_failed_hub_upload_warns_and_does_not_stop_training(monkeypatch):
     messages = []
     make_hub_uploader("me/r", True, 0, messages.append)(Path("x"), 50)
     assert len(messages) == 1 and "WARNING" in messages[0] and "step 50" in messages[0]
+
+
+# control run (decision 6): the base model and its own tokenizer, LoRA only ------------------------
+
+
+@pytest.fixture
+def control(world, tiny_base_json, tiny_qwen3):
+    """The world's base folder with weights added, and a control config on it."""
+    cfg, tmp = world
+    base = tmp / "base"
+    rows = inspect_tokenizer_json(tiny_base_json).total_vocab_size + 8
+    tiny_qwen3(rows, seed=2).save_pretrained(base)
+    ctl = cfg.model_copy(
+        update={
+            "model_path": base,
+            "control": True,
+            "phase_a_steps": 0,
+            "data_dir": tmp / "blocks_control",
+            "output_dir": tmp / "control",
+        }
+    )
+    return ctl, cfg, tmp
+
+
+def test_control_prepare_uses_the_base_tokenizer(control):
+    import hashlib
+
+    ctl, cfg, _ = control
+    main = run_prepare(cfg, log=lambda s: None)
+    meta = run_prepare(ctl, log=lambda s: None)
+    assert meta["control"] is True and meta["first_new_id"] is None
+    tok = (ctl.model_path / "tokenizer.json").read_bytes()
+    assert meta["tokenizer_sha256"] == hashlib.sha256(tok).hexdigest()
+    # The same Urdu text needs more tokens without the new merges: that is the cost being matched.
+    assert meta["urdu"]["n_tokens"] > main["urdu"]["n_tokens"]
+    assert main["control"] is False
+
+
+def test_control_run_trains_lora_only_and_saves_no_rows(control):
+    ctl, _, _ = control
+    run_prepare(ctl, log=lambda s: None)
+    summary = run_adapt(ctl, log=lambda s: None)
+    assert summary["finished"] and summary["final_step"] == 6 and summary["control"] is True
+    assert summary["first_new_id"] is None
+    rows = [json.loads(x) for x in (ctl.output_dir / "train_log.jsonl").read_text().splitlines()]
+    steps = [r for r in rows if "loss" in r]
+    assert {r["phase"] for r in steps} == {"B"}
+    assert all(r["lr_new"] is None and r["lr_lora"] > 0 for r in steps)
+    ckpt = latest_checkpoint(ctl.output_dir / "checkpoints")
+    assert (ckpt / "lora.pt").exists() and not (ckpt / "new_rows.pt").exists()
+
+
+def test_control_and_main_folders_and_settings_cannot_be_swapped(control):
+    ctl, cfg, tmp = control
+    with pytest.raises(ValueError, match="phase_a_steps: 0"):
+        run_prepare(ctl.model_copy(update={"phase_a_steps": 2}), log=lambda s: None)
+    with pytest.raises(ValueError, match="extended model"):
+        run_prepare(ctl.model_copy(update={"model_path": cfg.model_path}), log=lambda s: None)
+    with pytest.raises(FileNotFoundError, match="control: true"):
+        run_prepare(cfg.model_copy(update={"model_path": ctl.model_path}), log=lambda s: None)
+
+
+def test_control_never_resumes_a_main_run_checkpoint(control):
+    ctl, cfg, tmp = control
+    run_prepare(cfg, log=lambda s: None)
+    run_prepare(ctl, log=lambda s: None)
+    shared = tmp / "shared"
+    run_adapt(cfg.model_copy(update={"output_dir": shared}), log=lambda s: None, max_steps=2)
+    with pytest.raises(ValueError, match="control"):
+        run_adapt(ctl.model_copy(update={"output_dir": shared}), log=lambda s: None)
+
+
+def test_stop_at_step_stops_there_and_a_later_run_finishes(control):
+    ctl, _, _ = control
+    run_prepare(ctl, log=lambda s: None)
+    first = run_adapt(ctl, log=lambda s: None, stop_at_step=4)
+    assert first["final_step"] == 4 and not first["finished"]
+    again = run_adapt(ctl, log=lambda s: None, stop_at_step=4)  # already there: no step taken
+    assert again["resumed_from_step"] == 4 and again["final_step"] == 4
+    rest = run_adapt(ctl, log=lambda s: None)
+    assert rest["resumed_from_step"] == 4 and rest["finished"]
+    with pytest.raises(ValueError, match="not both"):
+        run_adapt(ctl, log=lambda s: None, max_steps=1, stop_at_step=2)
+
+
+def test_control_merge_keeps_every_row_and_the_tokenizer(control):
+    from transformers import AutoModelForCausalLM
+
+    from zubaan.adapt.finalize import CONTROL_METADATA_FILE, merge_and_save
+
+    ctl, _, tmp = control
+    ctl = ctl.model_copy(update={"merged_dtype": "float32"})
+    run_prepare(ctl, log=lambda s: None)
+    run_adapt(ctl, log=lambda s: None)
+    out = tmp / "control_merged"
+    summary = merge_and_save(ctl, out_dir=out, log=lambda s: None)
+    assert summary["step"] == 6 and summary["metadata"]["control"] is True
+    assert summary["metadata"]["stage3"]["merge_max_logit_diff"] < 1e-3
+    assert (out / CONTROL_METADATA_FILE).exists()
+    assert not (out / "zubaan_extension.json").exists()  # never mistaken for an extended model
+    assert (out / "tokenizer.json").read_bytes() == (ctl.model_path / "tokenizer.json").read_bytes()
+
+    merged = AutoModelForCausalLM.from_pretrained(out, dtype=torch.float32)
+    base = AutoModelForCausalLM.from_pretrained(ctl.model_path, dtype=torch.float32)
+    assert torch.equal(merged.get_input_embeddings().weight, base.get_input_embeddings().weight)
+    assert merged.get_output_embeddings().weight.data_ptr() == (
+        merged.get_input_embeddings().weight.data_ptr()
+    )
+    assert not any("lora_" in n for n, _ in merged.named_parameters())
+    x = torch.arange(3, 19)[None]
+    with torch.no_grad():
+        assert not torch.allclose(merged(input_ids=x).logits, base(input_ids=x).logits)
+
+
+def test_example_control_config_loads():
+    from zubaan.config import load_config
+
+    cfg = load_config("configs/adapt-control-qwen3-1.7b.yaml").adapt
+    assert cfg.control and cfg.phase_a_steps == 0 and cfg.phase_b_steps == 800
+    assert cfg.micro_batch_size * cfg.grad_accum == 32 and cfg.hub_repo is None
