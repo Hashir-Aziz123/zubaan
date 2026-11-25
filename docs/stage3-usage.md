@@ -2,12 +2,7 @@
 
 Stage 2 made Urdu cheaper: 10,000 new Urdu tokens cut the token cost of Urdu on Qwen3-1.7B from 3.14x to 1.29x that of the same English text. But those tokens' embedding rows were only initialized, never trained, so Urdu quality got worse. Stage 3 trains them with continued pretraining, checks quality against the base model, and exports the trained model again for llama.cpp, Ollama and vLLM.
 
-**Read this first.** The adapted model scores better than the base on Urdu bits per character while using far fewer tokens, and English was not damaged. But this is one small training run (26M tokens on one T4), not a new model to hand to users:
-
-- Belebele Urdu (reading comprehension) did not measurably change.
-- The gain has not yet been attributed to the tokenizer. The compute-matched control (notebook 11) answers that, and it has not been run.
-- Chat behavior degraded. With thinking on, the model often ends its turn after its reasoning without answering (3 of 4 prompts in Ollama). Serve it with thinking off, which has to be set per request.
-- It invents facts and falls into repetition loops on open-ended prompts.
+**Read this first.** The adapted model scores better than the base on Urdu bits per character while using far fewer tokens, and English was not damaged. But it comes from one small training run (26M tokens on one T4) and is not a chat assistant: serve it with thinking off, and read the limits in the verdict below. For the story of the stage in plain words, see [Stage 3 in plain words](stage3-story.md).
 
 Status (2026-11-25): **Stage 3 is done.** Training, evaluation, re-export, the vLLM check, the local Ollama check and the report are complete. The optional compute-matched control run (notebook 11) is written but not run.
 
