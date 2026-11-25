@@ -1,8 +1,9 @@
 """Report: "Extending Qwen3 with Urdu tokens". Cost, quality and export, from saved results.
 
 Every number in the text and tables is read from the JSON files written by
-``zubaan extend sweep``, ``zubaan extend quality`` and ``zubaan export``. Nothing is typed by
-hand, so the report cannot drift from the results.
+``zubaan extend sweep``, ``zubaan extend quality`` and ``zubaan export``, and for stage 3 by
+``zubaan adapt eval``, ``zubaan export check`` and the vLLM check (``report/adaptation.py``).
+Nothing measured is typed by hand, so the report cannot drift from the results.
 """
 
 from __future__ import annotations
@@ -163,8 +164,22 @@ def _init_verdict(variants: dict) -> str:
     return text
 
 
-def build_extension_markdown(sweep: dict, quality: dict, export: dict | None = None) -> str:
-    """The full report as Markdown. Chart images are referenced by relative file name."""
+def build_extension_markdown(
+    sweep: dict,
+    quality: dict,
+    export: dict | None = None,
+    adapt: dict | None = None,
+    adapted_export: dict | None = None,
+    adapted_check: dict | None = None,
+    adapted_vllm: dict | None = None,
+) -> str:
+    """The full report as Markdown. Chart images are referenced by relative file name.
+
+    ``adapt`` (the ``zubaan adapt eval`` results) adds the stage 3 section; the other
+    ``adapted_*`` results add its serving part.
+    """
+    from zubaan.report.adaptation import adaptation_section, adaptation_summary
+
     variants = quality["variants"]
     if "base" not in variants:
         raise ValueError("the quality results have no 'base' variant")
@@ -173,6 +188,23 @@ def build_extension_markdown(sweep: dict, quality: dict, export: dict | None = N
     pk = meta.get("packages", {})
     n_texts = settings.get("n_texts", {})
     export_text = _export_section(export) if export else ""
+    summary = _summary(sweep, quality, export)
+    adapt_text = ""
+    first_limit = (
+        "- The new embeddings are untrained. These numbers are the starting point for stage 3, "
+        "not a\n  model to hand to users."
+    )
+    if adapt:
+        summary.append(adaptation_summary(adapt))
+        adapt_text = adaptation_section(
+            adapt, adapted_export, adapted_check, adapted_vllm, stage2_base=variants["base"]
+        )
+        first_limit = (
+            "- The stage 2 rows are untrained; the stage 3 section shows the trained model. It "
+            "is one\n  small continued-pretraining run (one seed, 26M tokens, one T4), its gain "
+            "is not yet\n  attributed to the tokenizer, and its chat behavior has known problems "
+            "(see above)."
+        )
     return f"""# Extending {quality["model"]} with Urdu tokens
 
 Two things were measured for each vocabulary size: what Urdu costs in tokens, and what it does to
@@ -180,7 +212,7 @@ quality. A cost saving is only a result if quality is shown next to it.
 
 ## Summary
 
-{chr(10).join(_summary(sweep, quality, export))}
+{chr(10).join(summary)}
 
 ## What was done
 
@@ -227,11 +259,10 @@ questions each, scored by answer log-probability divided by answer length in cha
 {_init_section(variants)}
 
 {_init_verdict(variants)}
-{export_text}
+{export_text}{adapt_text}
 ## Limitations
 
-- The new embeddings are untrained. These numbers are the starting point for stage 3, not a
-  model to hand to users.
+{first_limit}
 - Belebele zero-shot is a coarse test for a 1.7B model: the base model is only a few points above
   chance, and the intervals of the variants overlap.
 - One seed and one Urdu corpus (Wikipedia, which is formal register). Social-media or
@@ -251,6 +282,7 @@ uv run zubaan extend sweep   --config configs/extend-qwen3.yaml
 # GPU, see notebooks/02_extend_quality_qwen3.ipynb
 uv run zubaan extend quality --config configs/extend-qwen3.yaml
 uv run zubaan report extend
+# stage 3 (GPU, notebooks 07 to 10): adapt prepare, run, merge, eval; export all and check
 ```
 """
 
@@ -305,8 +337,12 @@ def build_extension_report(
     quality_path: Path,
     out_dir: Path,
     export_path: Path | None = None,
+    adapt_path: Path | None = None,
+    adapted_export_path: Path | None = None,
+    adapted_check_path: Path | None = None,
+    adapted_vllm_path: Path | None = None,
 ) -> Path:
-    """Write ``index.md`` and its charts into ``out_dir``."""
+    """Write ``index.md`` and its charts into ``out_dir``. Missing optional files are skipped."""
     from zubaan.report import charts
 
     sweep = load_json(sweep_path)
@@ -316,10 +352,28 @@ def build_extension_report(
     if quality is None:
         raise ValueError(f"{quality_path} not found; run zubaan extend quality first")
     export = load_json(export_path)
+    adapt = load_json(adapt_path)
     out_dir.mkdir(parents=True, exist_ok=True)
     charts.extension_cost_chart(sweep["rows"], out_dir / "extension_cost.png")
     charts.extension_quality_chart(quality["variants"], out_dir / "extension_quality.png")
+    if adapt:
+        from zubaan.report.adaptation import check_adapt_results
+
+        check_adapt_results(adapt)
+        order = adapt.get("order") or list(adapt["variants"])
+        charts.adaptation_quality_chart(
+            adapt["variants"], order, out_dir / "adaptation_quality.png"
+        )
+    text = build_extension_markdown(
+        sweep,
+        quality,
+        export,
+        adapt,
+        load_json(adapted_export_path),
+        load_json(adapted_check_path),
+        load_json(adapted_vllm_path),
+    )
     path = out_dir / "index.md"
     with path.open("w", encoding="utf-8", newline="\n") as f:
-        f.write(build_extension_markdown(sweep, quality, export))
+        f.write(text)
     return path

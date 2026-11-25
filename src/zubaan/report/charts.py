@@ -226,3 +226,53 @@ def extension_quality_chart(
     _style(ax)
     ax.set_title("Untrained new tokens hurt Urdu quality", loc="left", fontsize=11)
     return _save(fig, path)
+
+
+# Stage 3: one color per model, fixed by entity. The extended model before training is the
+# mean-of-pieces variant, so it keeps that variant's aqua from the chart above.
+ADAPT_MODEL_COLORS = {"base": "#2a78d6", "extended-untrained": "#1baf7a", "adapted": "#eb6834"}
+ADAPT_MODEL_LABELS = {
+    "base": "Base model",
+    "extended-untrained": "Extended, untrained",
+    "adapted": "Extended, adapted (stage 3)",
+}
+ADAPT_SETS = (
+    ("urdu_flores", "FLORES Urdu"),
+    ("urdu_heldout", "Held-out Urdu"),
+    ("english_flores", "FLORES English"),
+)
+
+
+def adaptation_quality_chart(variants: dict, order: list[str], path: Path) -> Path:
+    """Bits per character per text set (groups) and model (bars), every bar labeled.
+
+    Bits per character is per character, so the bars compare across the two tokenizers.
+    """
+    plt = _plt()
+    models = [m for m in order if m in variants]
+    unknown = [m for m in models if m not in ADAPT_MODEL_COLORS]
+    if unknown:
+        raise ValueError(f"no chart color for {unknown}; known: {sorted(ADAPT_MODEL_COLORS)}")
+    fig, ax = plt.subplots(figsize=(7.5, 0.42 * len(models) * len(ADAPT_SETS) + 1.8))
+    height, y = 0.3, 0.0
+    ticks, labels, top = [], [], 0.0
+    for key, label in ADAPT_SETS:
+        start = y
+        for m in models:
+            bpc = variants[m]["bpc"][key]["bits_per_character"]
+            top = max(top, bpc)
+            ax.barh(y, bpc, height=height - 0.04, color=ADAPT_MODEL_COLORS[m],
+                    label=ADAPT_MODEL_LABELS[m] if key == ADAPT_SETS[0][0] else None)  # fmt: skip
+            ax.text(bpc + 0.04, y, f"{bpc:.2f}", va="center", fontsize=8, color=TEXT_SECONDARY)
+            y -= height
+        ticks.append((start + y + height) / 2)
+        labels.append(label)
+        y -= 0.3
+    ax.set_yticks(ticks, labels)
+    ax.set_xlabel("Bits per character (lower is better)")
+    ax.set_xlim(0, top * 1.15)
+    ax.set_ylim(y + 0.15, 0.3)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.16), ncol=3, frameon=False)
+    _style(ax)
+    ax.set_title("Bits per character before and after stage 3 training", loc="left", fontsize=11)
+    return _save(fig, path)

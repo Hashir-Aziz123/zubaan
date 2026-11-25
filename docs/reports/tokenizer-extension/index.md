@@ -10,6 +10,7 @@ quality. A cost saving is only a result if quality is shown next to it.
 - Belebele Urdu accuracy is 33.4% (30.4% to 36.6%) for the base model. Every extended variant scores between 24.9% and 27.0%, against a chance level of 25%.
 - English is almost untouched: bits per character moves from 1.208 to between 1.210 and 1.214.
 - GGUF export passes the tokenizer parity check: llama.cpp `b12477` and Hugging Face give identical token ids on 2,041 of 2,045 texts, and the other 4 differ only because the text is not in NFC form (see the GGUF section).
+- After stage 3 training, the extended model needs **2.43x fewer tokens** for the same FLORES Urdu text and scores **0.62 fewer bits per character** than the base (2.339 to 1.718). Belebele Urdu is 34.0% against the base's 33.4%. Whether the gain comes from the new tokens or from the extra Urdu training is not yet known (see the stage 3 section).
 
 ## What was done
 
@@ -87,10 +88,66 @@ FLORES English and a stress set with emoji, numbers, mixed script, an empty stri
 lines) tokenize to identical ids with Hugging Face and llama.cpp. The other 4 texts are not in Unicode NFC form (Arabic diacritics stacked in a different order than NFC puts them). Qwen's tokenizer normalizes to NFC before tokenizing and llama.cpp's BPE tokenizer does not, so the ids differ for such text. For every one of them llama.cpp gives exactly Hugging Face's ids once the text is NFC-normalized first, so the vocabulary and merges are identical. This comes from the base model and llama.cpp, not from the extension. Normalize Urdu to NFC before sending it to a GGUF model (`zubaan.text.normalize_urdu` does). Quantized files:
 `qwen3-1.7b-urdu-Q4_K_M.gguf`, `qwen3-1.7b-urdu-Q8_0.gguf`, calibrated with an importance matrix built from Urdu Wikipedia (training split).
 
+## Stage 3: training the new tokens
+
+The extended model (10,000 new tokens, mean-of-pieces initialization) was trained by continued
+pretraining on a Kaggle T4 in fp16: 100 steps that train only the new embedding rows, then 700
+steps of LoRA (rank 64 on all attention and MLP projections) plus the new rows. Each step is 32
+blocks of 1,024 tokens; the data is Urdu Wikipedia (16.05M tokens with the extended tokenizer)
+with 10% English Wikipedia mixed in, after removing every line that overlaps FLORES or Belebele.
+The old embedding rows were never changed. Design and reasons: `docs/decisions.md`, 2026-11-18.
+
+All three models were then scored on the same texts as the table above (1000 held-out Urdu, 1000 FLORES Urdu and 1000
+FLORES English texts, all 900 Belebele questions per language,
+float32). The base model reproduced its stage 2 bits per character to three decimals.
+
+![Bits per character of the three models on three text sets](adaptation_quality.png)
+
+| Model | Vocabulary | Urdu tokens/char (FLORES) | Urdu bits/char (held-out) | Urdu bits/char (FLORES) | English bits/char | Belebele Urdu | Belebele English |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `base` | 151,669 | 0.668 | 2.310 | 2.339 | 1.208 | 33.4% (30.4% to 36.6%) | 44.7% (41.4% to 47.9%) |
+| `extended-untrained` | 161,669 | 0.275 | 3.570 | 3.562 | 1.210 | 25.3% (22.6% to 28.3%) | 44.7% (41.4% to 47.9%) |
+| `adapted` | 161,669 | 0.275 | 1.486 | 1.718 | 1.066 | 34.0% (31.0% to 37.2%) | 45.9% (42.7% to 49.2%) |
+
+Success checks set before training (`docs/decisions.md`):
+
+- **PASS**: English bits per character within tolerance of the base. 1.066 vs 1.208 (difference -0.142, allowed +0.020).
+- **PASS**: Urdu held-out bits per character below the untrained model (must). 1.486 vs 3.570.
+- **PASS**: Urdu held-out bits per character at or below the base (stretch). 1.486 vs 2.310.
+- **PASS, within noise**: Belebele Urdu acc_char above the base. 0.340 [0.310, 0.372] vs 0.334 [0.304, 0.366]; intervals overlap: not distinguishable from noise.
+
+### How to read it
+
+- **Training repaired the damage of the untrained rows and went past the base.** FLORES Urdu went 2.339 (base), 3.562 (untrained), 1.718 (adapted).
+- **FLORES Urdu is the cleaner Urdu number.** The held-out lines come from the same Wikipedia dump as the training text, so they are in-domain and flatter the result (1.486 held-out against 1.718 FLORES).
+- **The lower English number (1.208 to 1.066) is not evidence that English got better.** The base is a chat model, whose plain-text likelihood is weaker than a model tuned on plain text, and the English replay is Wikipedia, close to FLORES in style. Neither cause was tested. What it does show is that English was not damaged on this metric.
+- **Understanding did not measurably change.** Belebele Urdu is 34.0% (31.0% to 37.2%) against 33.4% (30.4% to 36.6%) for the base; the intervals overlap. Better likelihood from a small continued-pretraining run did not turn into better multiple-choice answers.
+- **The gain is not attributed to the tokenizer.** The adapted model trained on 16M tokens of Urdu that the base never saw. The compute-matched control (the base model with its own tokenizer, the same recipe and the same number of tokens, notebook 11) answers whether the new tokens help or hurt at equal cost. It has not been run yet.
+
+### Serving the adapted model
+
+**GGUF.** llama.cpp `b12477`, pre-tokenizer `qwen2` recognized without a converter patch. Tokenizer parity: 2,041 of 2,045 texts give identical ids, the other 4 differ only because the text is not NFC, and 0 differ for real. Training does not touch the tokenizer, so this matches stage 2. Files: `qwen3-1.7b-urdu-adapted-Q4_K_M.gguf`, `qwen3-1.7b-urdu-adapted-Q8_0.gguf`, with an importance matrix from Urdu Wikipedia (training split).
+
+**Quantization cost against the f16 file** (llama.cpp KL-divergence mode, 20 chunks of 512 tokens). All files share one tokenizer, so these per-token numbers compare the files with each other; they are not a language comparison.
+
+| Text | Quantization | Mean KL divergence | Same top token | Perplexity ratio |
+| --- | --- | ---: | ---: | ---: |
+| FLORES Urdu | Q8_0 | 0.0017 | 96.7% | 1.0036 |
+| FLORES Urdu | Q4_K_M | 0.0341 | 85.9% | 1.0247 |
+| FLORES English | Q8_0 | 0.0018 | 97.2% | 1.0033 |
+| FLORES English | Q4_K_M | 0.0320 | 89.8% | 1.0271 |
+
+**CPU generation speed** (llama.cpp, 4 threads, greedy (temperature 0), median over the sample prompts, tokens per second): F16 6.0, Q4_K_M 14.9, Q8_0 10.6. This compares the files with each other on one Kaggle CPU session; it is not a benchmark.
+
+**vLLM** 0.34.0 on a Tesla T4 (`dtype half`): passed; tokenization identical to `tokenizer.json` on 5 test texts, and an Urdu chat question with thinking off gets an answer in Urdu script. **With thinking allowed, the model wrote an English reasoning block and ended the turn inside it, with no closing tag and no answer** (one greedy sample). Training the chat model on plain text taught it to end documents; serve it with thinking off.
+
+**Generated text, read by a person** (greedy decoding, details in `docs/decisions.md`): fluent Urdu that answers simple questions, but with repetition loops on open-ended prompts and invented facts (for example Islamabad called the largest city, and inconsistent population figures). This is a 1.7B model after a small continued-pretraining run, not a source of facts.
+
 ## Limitations
 
-- The new embeddings are untrained. These numbers are the starting point for stage 3, not a
-  model to hand to users.
+- The stage 2 rows are untrained; the stage 3 section shows the trained model. It is one
+  small continued-pretraining run (one seed, 26M tokens, one T4), its gain is not yet
+  attributed to the tokenizer, and its chat behavior has known problems (see above).
 - Belebele zero-shot is a coarse test for a 1.7B model: the base model is only a few points above
   chance, and the intervals of the variants overlap.
 - One seed and one Urdu corpus (Wikipedia, which is formal register). Social-media or
@@ -110,4 +167,5 @@ uv run zubaan extend sweep   --config configs/extend-qwen3.yaml
 # GPU, see notebooks/02_extend_quality_qwen3.ipynb
 uv run zubaan extend quality --config configs/extend-qwen3.yaml
 uv run zubaan report extend
+# stage 3 (GPU, notebooks 07 to 10): adapt prepare, run, merge, eval; export all and check
 ```

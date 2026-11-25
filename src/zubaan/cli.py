@@ -295,19 +295,44 @@ def report_extend(
         "reports/extend_quality_qwen3-1.7b.json"
     ),
     export_summary: Annotated[Path, typer.Option(help="export_summary.json from export")] = Path(
-        "outputs/qwen3-1.7b/export/export_summary.json"
+        "reports/export_summary.json"
     ),
+    adapt_quality: Annotated[Path, typer.Option(help="Stage 3: output of adapt eval")] = Path(
+        "reports/adapt_quality.json"
+    ),
+    adapted_export: Annotated[
+        Path, typer.Option(help="Stage 3: export_summary.json of the adapted model")
+    ] = Path("reports/export_summary_09.json"),
+    adapted_check: Annotated[
+        Path, typer.Option(help="Stage 3: export check results of the adapted model")
+    ] = Path("reports/export_check_09.json"),
+    adapted_vllm: Annotated[
+        Path, typer.Option(help="Stage 3: vLLM check of the adapted model")
+    ] = Path("reports/vllm_check_adapted.json"),
     out: Annotated[Path, typer.Option(help="Report directory")] = Path(
         "docs/reports/tokenizer-extension"
     ),
 ) -> None:
-    """Write the tokenizer extension report: cost, quality and GGUF parity (Markdown + PNGs)."""
+    """Write the tokenizer extension report: cost, quality, GGUF parity and stage 3 results.
+
+    Optional inputs that do not exist are left out with a note.
+    """
     from zubaan.report.extension import build_extension_report
 
-    if not export_summary.exists():
-        console.print(f"[yellow]{export_summary} not found; the export section is left out.[/]")
+    for f, what in [
+        (export_summary, "export section"),
+        (adapt_quality, "stage 3 section"),
+        (adapted_export, "stage 3 GGUF part"),
+        (adapted_check, "stage 3 quantization part"),
+        (adapted_vllm, "stage 3 vLLM part"),
+    ]:
+        if not f.exists():
+            console.print(f"[yellow]{f} not found; the {what} is left out.[/]")
     try:
-        path = build_extension_report(sweep, quality, out, export_summary)
+        path = build_extension_report(
+            sweep, quality, out, export_summary, adapt_quality, adapted_export, adapted_check,
+            adapted_vllm,
+        )  # fmt: skip
     except ValueError as e:
         raise typer.BadParameter(str(e)) from e
     console.print(f"Wrote {path}")
