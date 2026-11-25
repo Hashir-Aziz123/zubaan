@@ -17,7 +17,7 @@ def test_help_lists_commands():
 def test_planned_commands_exit_nonzero():
     result = runner.invoke(cli.app, ["draft"])
     assert result.exit_code == 1
-    assert "stage 4" in result.output
+    assert "stage 5" in result.output
 
 
 def test_audit_fertility_json(monkeypatch, char_tokenizer, fixtures_dir):

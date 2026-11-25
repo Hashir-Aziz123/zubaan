@@ -170,7 +170,7 @@ gamma = 1 to 6 and the table reports the best gamma for each language. It uses d
 c = {cost:.2f} ({any_lang["draft_cost_source"]}) and assumes each drafted token is accepted
 independently. A low alpha favors short drafts, so one fixed gamma understates the achievable
 speedup for the language with the lower alpha.
-Real speed is measured against running servers in stage 5.
+Real speed is measured against running servers in stage 6.
 {words}"""
 
 

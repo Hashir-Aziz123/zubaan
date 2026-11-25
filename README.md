@@ -2,7 +2,7 @@
 
 **Urdu users pay more and wait longer for AI than English users. zubaan measures that gap and produces a faster, cheaper model you can actually deploy.**
 
-> Status: pre-alpha. Stages 1 (audit), 2 (extend and export) and 3 (adapt) are done; draft and bench are planned. The adapted Qwen3-1.7B reads Urdu with 2.4x fewer tokens than the base and scores better on Urdu bits per character, but it is a research artifact, not a chat assistant (see [docs/stage3-usage.md](docs/stage3-usage.md)). See [docs/roadmap.md](docs/roadmap.md).
+> Status: pre-alpha. Stages 1 (audit), 2 (extend and export) and 3 (adapt) are done; chat repair (stage 4), draft and bench are planned. Tested on the Qwen3 family only. The adapted Qwen3-1.7B reads Urdu with 2.4x fewer tokens than the base and scores better on Urdu bits per character, but it is a research artifact, not a chat assistant (see [docs/stage3-usage.md](docs/stage3-usage.md)). See [docs/roadmap.md](docs/roadmap.md).
 
 ## The problem
 
@@ -25,6 +25,7 @@ Research has shown fixes for both: extend the tokenizer with target-language tok
 | `zubaan audit acceptance` | Speculative decoding acceptance rate for a draft/target pair | Working |
 | `zubaan extend` | Adds target-language merges to a tokenizer, initializes new embeddings, saves and verifies the model | Working (new rows untrained) |
 | `zubaan adapt` | Short continued pretraining recipe sized for a free Kaggle GPU | Done for Qwen3-1.7B: Urdu quality above the base, English not damaged |
+| `zubaan tune` | Short instruction tuning that restores chat behavior after `adapt` (generated Urdu conversations with thinking traces) | Planned (stage 4) |
 | `zubaan draft` | Drafters that share the extended vocabulary | Planned |
 | `zubaan export` | GGUF (with tokenizer parity checks), vLLM and Ollama configs | Done for Qwen3-0.6B and 1.7B; parity passed, vLLM and Ollama checked |
 | `zubaan bench` | End-to-end benchmarks with tokenizer-fair metrics | Planned |

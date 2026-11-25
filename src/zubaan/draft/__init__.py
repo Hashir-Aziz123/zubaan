@@ -1,4 +1,4 @@
-"""Stage 4: drafters that share the extended vocabulary.
+"""Stage 5: drafters that share the extended vocabulary.
 
 Planned modules:
 - distill.py: extend a small model with the same tokenizer, then distill it on the

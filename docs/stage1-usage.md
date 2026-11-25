@@ -85,7 +85,7 @@ uv run zubaan audit acceptance -d Qwen/Qwen3-0.6B -t Qwen/Qwen3-1.7B \
 - The draft and target must have the **same vocabulary**. The command stops if they do not.
 - **Local machine (8 GB RAM, no GPU):** works with `--dtype bfloat16 --device cpu` on a small sample (`--max-texts 50`, the default). `--mode sequential` loads one model at a time to save memory. Expect it to be slow.
 - **Full 1,012-sentence run: use Kaggle.** We ran it on a T4 GPU in about 8 minutes using `notebooks/01_audit_acceptance_qwen3.ipynb`. On T4/P100 use `float32` or `float16`, never bfloat16 (those GPUs lack it).
-- The speedup shown is **modelled, not measured**. Real measured speedup comes in Stage 5.
+- The speedup shown is **modelled, not measured**. Real measured speedup comes in Stage 6 (benchmarks).
 
 ## 5. `zubaan report tax`: shareable report
 

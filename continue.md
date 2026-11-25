@@ -1,6 +1,14 @@
 # Where we left off (end of 2026-11-25)
 
-Stages 1, 2 and **3 are done** (stage 3 closed 2026-11-25; write-up `docs/stage3-usage.md`, results in the Stage 3 section of `docs/reports/tokenizer-extension/`). **Next is Stage 4** (drafters that share the extended vocabulary; see `docs/roadmap.md` and the "Next: stage 4 and 5" section below). To resume, tell Claude: "read continue.md and pick up from there".
+Stages 1, 2 and **3 are done** (stage 3 closed 2026-11-25; write-up `docs/stage3-usage.md`, results in the Stage 3 section of `docs/reports/tokenizer-extension/`). **Next is the new Stage 4: restore chat behavior** (plan `docs/stage4-plan.md`; see "Start here tomorrow" below). Stages were renumbered on 2026-11-25: draft is now Stage 5, bench and release Stage 6. To resume, tell Claude: "read continue.md and pick up from there".
+
+## Start here tomorrow (Stage 4, chunks 0 and 1)
+
+Decided on 2026-11-25 (`docs/decisions.md`, "Stage 4: restore chat behavior"): repair chat behavior with a short SFT on the Stage 3 adapted model, **support thinking mode**, and **generate the data** with a larger open Qwen3 teacher (not Aya, not a commercial API). Nothing is built yet.
+
+1. **Chunk 0, teacher trial (Kaggle, about 1 GPU hour).** Write a small notebook generator (next number is 12) that runs Qwen3-8B in vLLM (two T4s with tensor parallelism, `dtype half`) or a 4-bit Qwen3-14B on one T4, on about 50 Urdu Wikipedia passages from the training split. For each passage: the teacher writes a few questions, then answers them with thinking on and with thinking off. The user reads the Urdu outputs and picks the teacher; confirm the data mix (proposal: about 10,000 conversations, 40% Urdu with thinking, 40% Urdu without, 20% English).
+2. **Chunk 1, chat-behavior check (laptop).** A `zubaan tune check` command (new package `src/zubaan/tune/`, config section `tune:`) that sends a fixed prompt set to an OpenAI-compatible or Ollama server and reports, per mode, the answer rate, Urdu-script share, closed think blocks and token-limit hits. Generalize the scratch script used for the Stage 3 Ollama check (its results are in `reports/ollama_check_adapted.json`). The prompt set is hand-written (ask the user to write or approve about 30 Urdu and 10 English prompts) and is never shown to the teacher. Run it on the base (Qwen's official Qwen3-1.7B GGUF in Ollama) and on the Stage 3 model for a baseline.
+3. Before any training: confirm the success checks in `docs/stage4-plan.md` with the user.
 
 Optional follow-up, any time: the Stage 3 compute-matched control run (notebook 11, guide `docs/stage3-control-run.md`, about 10 Kaggle GPU hours, needs a new private Hub repo). When its results come back, add them to `docs/decisions.md` and the report.
 
@@ -197,9 +205,9 @@ Chunks 0 to 3 need no GPU and can be finished and tested on the laptop first. On
 - **Noisy headline numbers.** Belebele Urdu on a 1.7B model sits near chance. Report intervals; lean on bits per character as the primary quality measure.
 - **Merging LoRA in fp16** can lose small updates to rounding. Mitigation: merge in fp32, then save, then re-run the verify and quality checks on the merged folder, not the adapter.
 
-## Next: stage 4 and 5
+## Later: stage 5 (draft) and 6 (bench), numbered 4 and 5 before 2026-11-25
 
-Stage 4 (drafters sharing the extended vocabulary, distilled from the adapted target) and stage 5 (benchmarks); see `docs/roadmap.md`. Stage 4 uses Qwen3-0.6B with the same merges, which is why the 0.6B was extended with the identical tokenizer.
+Stage 5 (drafters sharing the extended vocabulary, distilled from the Stage 4 target) and stage 6 (benchmarks); see `docs/roadmap.md`. Stage 5 uses Qwen3-0.6B with the same merges, which is why the 0.6B was extended with the identical tokenizer.
 
 ## Notes for Claude
 

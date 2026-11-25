@@ -1,4 +1,4 @@
-"""Stage 5: benchmarks against running servers.
+"""Stage 6: benchmarks against running servers.
 
 Planned modules:
 - runner.py: async OpenAI-compatible client measuring TTFT, tokens/s and words/s,

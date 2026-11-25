@@ -22,8 +22,9 @@ The pipeline, one CLI command per stage:
 | `zubaan extend` | `learn`, `sweep`, `quality`, `run`: add target-language merges, resize and initialize embeddings, save and verify the model | 2 (done; rows untrained) |
 | `zubaan export` | `gguf` (with tokenizer parity check), `ollama`, `vllm`, `all` | 2 (done; 1.7B parity passed) |
 | `zubaan adapt` | Continued pretraining so the model learns new tokens: new rows, then LoRA, English replay (Kaggle) | 3 (done; optional compute-matched control run pending) |
-| `zubaan draft` | Drafters sharing the extended vocabulary: distilled small model, n-gram | 4 |
-| `zubaan bench` | Benchmarks against running servers with tokenizer-fair metrics | 5 |
+| `zubaan tune` | Restore chat behavior: chat check, generated conversations with thinking traces from a larger Qwen3, short SFT (Kaggle) | 4 (planned, `docs/stage4-plan.md`) |
+| `zubaan draft` | Drafters sharing the extended vocabulary: distilled small model, n-gram | 5 |
+| `zubaan bench` | Benchmarks against running servers with tokenizer-fair metrics | 6 |
 
 Goal of the project for its author: a public, credible demonstration of skill in model inference, serving, and local deployment. Correct measurements and honest reporting matter more than impressive numbers.
 
@@ -59,8 +60,9 @@ src/zubaan/
                 ollama.py, vllm.py, pipeline.py (export all)
   adapt/        stage 3: data.py (token blocks), params.py (new rows + LoRA), cpt.py (loop),
                 pipeline.py, finalize.py (merge, save, verify), evaluate.py (score model folders, checks)
-  draft/        stage 4: distill.py, ngram.py (planned)
-  bench/        stage 5: runner.py, quality.py (planned)
+  tune/         stage 4: generate.py, filters.py, data.py, sft.py, chat_check.py (planned)
+  draft/        stage 5: distill.py, ngram.py (planned)
+  bench/        stage 6: runner.py, quality.py (planned)
   report/       charts.py, tax.py, extension.py: Markdown reports with PNG charts
   data/         flores.py: FLORES download; urdu.py: Urdu Wikipedia training corpus
 tests/          pytest; fixtures/ holds tiny text samples; conftest.py has a fake llama.cpp folder
@@ -90,6 +92,7 @@ data/, outputs/, reports/, tools/   local artifacts, gitignored
 - **GGUF export must prove tokenizer parity**: tokenize a test set with Hugging Face and llama.cpp and assert identical ids; the export stops before quantizing if one differs. The converter picks the pre-tokenizer type from a fingerprint of the tokenizer. On llama.cpp `b12477` the extended Qwen3 tokenizer has the same fingerprint as the base (the converter's test string has no Arabic-script characters), so it is recognized as `qwen2` without a patch. If a tokenizer or release is not recognized, `export/gguf.py` maps the fingerprint to the base model's type, which is only valid because the pre-tokenizer is unchanged (it asserts that first). The parity test, not the absence of a warning, is the proof.
 - **Calibrate quantization (imatrix) on target-language text**, not generic English.
 - **Report quality next to speed** (bits per character, Belebele Urdu). A speedup with a hidden quality drop is not a result.
+- **Check chat behavior after any training of a chat model** (answer rate with thinking on and off, reply language), against the base model. Stage 3 passed every likelihood check and still broke thinking mode.
 
 ## Hardware and environment constraints
 

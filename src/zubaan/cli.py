@@ -992,7 +992,7 @@ def adapt_eval(
 @app.command()
 def draft() -> None:
     """Build drafters that share the extended vocabulary."""
-    _planned(4, "draft model distillation and n-gram drafter")
+    _planned(5, "draft model distillation and n-gram drafter")
 
 
 def _export_config(config: Path, model_dir: Path | None):
@@ -1087,7 +1087,7 @@ def export_check(
 @app.command()
 def bench() -> None:
     """Benchmark running servers with tokenizer-fair metrics."""
-    _planned(5, "end-to-end benchmarks")
+    _planned(6, "end-to-end benchmarks")
 
 
 if __name__ == "__main__":  # pragma: no cover

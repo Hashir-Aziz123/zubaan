@@ -57,15 +57,36 @@ Plan and decisions: `continue.md` and `docs/decisions.md` (2026-11-18). Start fr
 
 Optional follow-up:
 
-- [ ] Compute-matched control run (decision 6): base model with its own tokenizer, same recipe and token count. Code, config and notebook 11 are ready (guide `docs/stage3-control-run.md`); needs about 10 Kaggle GPU hours. It is the only way to attribute the quality gain to the tokenizer.
+- [ ] Compute-matched control run (decision 6): base model with its own tokenizer, same recipe and token count. Code, config and notebook 11 are ready (guide `docs/stage3-control-run.md`); needs about 10 Kaggle GPU hours. It is the only way to attribute the quality gain to the tokenizer. Stage 4 does not change the continued-pretraining recipe, so the control stays valid and can run at any time.
 
-## Stage 4: draft (2 to 3 weeks)
+## Stage 4: restore chat behavior (1 to 2 weeks)
 
-- [ ] Extend Qwen3-0.6B with the same tokenizer; distill on adapted target outputs
+Added 2026-11-25. Stage 3's plain-text training left the adapted model unable to answer with thinking on (3 of 4 prompts in Ollama) and none of its checks caught it. A short instruction-tuning step on generated Urdu and English conversations, with thinking traces from a larger Qwen3 teacher, repairs this before drafters are built on the model. Full plan: `docs/stage4-plan.md`. Decisions: `docs/decisions.md`, 2026-11-25. Stage numbers changed on that date: draft was Stage 4 and is now 5; bench and release was 5 and is now 6.
+
+- [ ] Chunk 0: teacher trial on Kaggle (Qwen3-8B, or a 4-bit 14B), about 50 Urdu passages, read by the author; pick the teacher and confirm the data mix
+- [ ] Chunk 1: chat-behavior check (answer rate with thinking on and off, Urdu-script share, closed think blocks, loops) on a hand-written prompt set; baseline for the base and Stage 3 models
+- [ ] Chunk 2: prompt generation grounded in Urdu Wikipedia passages, contamination guard
+- [ ] Chunk 3: teacher responses with and without thinking (vLLM on Kaggle)
+- [ ] Chunk 4: filters with counts, and 100 to 200 conversations read by a person
+- [ ] Chunk 5: SFT code (chat template rendering, assistant-only loss, LoRA, resume), tested on a tiny model
+- [ ] Chunk 6: smoke and main SFT run on a T4, merge and verify
+- [ ] Chunk 7: evaluation against the success checks (chat behavior plus the Stage 3 quality protocol)
+- [ ] Chunk 8: re-export (GGUF parity, Q4_K_M and Q8_0, Ollama, vLLM), chat check on the quantized file
+- [ ] Chunk 9: write-up, report section, scope note (tested on Qwen3 only)
+
+Later, not part of this stage: support for other model families (SentencePiece tokenizers, untied embedding and head, non-ChatML chat formats).
+
+## Stage 5: draft (2 to 3 weeks)
+
+Was Stage 4 before 2026-11-25. The target is the Stage 4 model.
+
+- [ ] Extend Qwen3-0.6B with the same tokenizer; distill on the Stage 4 target's outputs
 - [ ] n-gram drafter experiment
 - [ ] Acceptance before and after, Urdu versus English
 
-## Stage 5: bench and release (2 weeks)
+## Stage 6: bench and release (2 weeks)
+
+Was Stage 5 before 2026-11-25.
 
 - [ ] Benchmark runner: TTFT, tokens/s, words/s, server-reported acceptance
 - [ ] llama.cpp on CPU (laptop) and vLLM on Kaggle
