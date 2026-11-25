@@ -49,7 +49,10 @@ Plan and decisions: `continue.md` and `docs/decisions.md` (2026-11-18). Start fr
 - [x] Quality (chunk 7, notebook 08, 2026-11-19): FLORES Urdu bits per character 2.339 (base) / 3.562 (untrained) / 1.718 (adapted), held-out Urdu 2.310 / 3.570 / 1.486, FLORES English 1.208 / 1.210 / 1.066, Belebele Urdu acc_char 0.334 / 0.253 / 0.340 (intervals overlap with the base: no detectable change). Tokens per Urdu character 0.643 to 0.281. Report section and chart still to write
 - [ ] Optional compute-matched control run (decision 6), planned for next week's quota
 - [ ] Quality report section and chart in `docs/reports/tokenizer-extension/` (from `reports/adapt_quality.json`)
-- [ ] Re-export (GGUF parity, Q4_K_M, vLLM check) and write-up (chunks 8 and 9)
+- [x] Re-export (chunk 8, notebook 09, 2026-11-24): GGUF parity 2,041/2,045 (4 NFC-only, 0 real), Q4_K_M and Q8_0 with the Urdu imatrix, quantization cost on Urdu about the same as on English
+- [x] vLLM check (chunk 8, notebook 10, 2026-11-25): tokenization identical, Urdu completion and chat work with thinking off; with thinking allowed the model ends inside `<think>` with no answer
+- [ ] Local Ollama chat check with the Q4_K_M file (thinking off)
+- [ ] Write-up (chunk 9): `docs/stage3-usage.md`, CLAUDE.md stage table
 
 ## Stage 4: draft (2 to 3 weeks)
 
