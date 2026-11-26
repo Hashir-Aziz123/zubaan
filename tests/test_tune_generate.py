@@ -198,3 +198,96 @@ def test_teacher_server_is_half_precision_without_a_reasoning_parser():
     assert not any("reasoning" in c for c in cmd)
     with pytest.raises(ValueError):
         teacher_serve_command("m", "m", tensor_parallel=0)
+
+
+# the data mix ---------------------------------------------------------------------------------
+
+from zubaan.tune.generate import (  # noqa: E402
+    DEFAULT_MIX,
+    MixSlot,
+    assign_modes,
+    check_mix,
+    passage_counts,
+    shard_of,
+    split_by_format,
+)
+
+
+def test_passage_counts_worked_example():
+    # 6,000 grounded Urdu conversations x 1.15 spare / 2 per passage = 3,450 passages.
+    counts = passage_counts(DEFAULT_MIX)
+    assert counts[("urd", "grounded")] == 3450
+    assert counts[("urd", "standalone")] == 1150
+    assert counts[("eng", "grounded")] == 863  # ceil(1,500 x 1.15 / 2) = ceil(862.5)
+    assert counts[("eng", "standalone")] == 288  # ceil(287.5)
+    assert sum(s.count for s in DEFAULT_MIX) == 10_000
+
+
+def test_mix_refuses_standalone_thinking_and_bad_slots():
+    with pytest.raises(ValueError, match="hidden background"):
+        check_mix([MixSlot("urd", "standalone", True, 10)])
+    for bad in (
+        [MixSlot("xx", "grounded", True, 1)],
+        [MixSlot("urd", "grounded", True, 0)],
+        [MixSlot("urd", "grounded", True, 1)] * 2,
+    ):
+        with pytest.raises(ValueError):
+            check_mix(bad)
+
+
+def test_split_by_format_uses_each_passage_once():
+    ps = [Passage(f"urd-{i}", "urd", "x") for i in range(5)]
+    out = split_by_format(ps, {"grounded": 3, "standalone": 2})
+    assert [p.id for p in out["grounded"]] == ["urd-0", "urd-1", "urd-2"]
+    assert [p.id for p in out["standalone"]] == ["urd-3", "urd-4"]
+    with pytest.raises(ValueError, match="need 6"):
+        split_by_format(ps, {"grounded": 3, "standalone": 3})
+
+
+def test_shards_cover_everything_once_and_are_stable():
+    ids = [f"urd-{i}" for i in range(1000)]
+    shards = [shard_of(i, 2) for i in ids]
+    assert set(shards) == {0, 1} and 400 < shards.count(0) < 600
+    assert shards == [shard_of(i, 2) for i in ids]
+    with pytest.raises(ValueError):
+        shard_of("x", 0)
+
+
+def test_assign_modes_matches_the_mix_share_and_ignores_order():
+    qs = [
+        Question(f"urd-{i}-g0", f"urd-{i}", "urd", "grounded", "explain", "?") for i in range(3000)
+    ]
+    qs += [
+        Question(f"urd-{i}-s0", f"urd-{i}", "urd", "standalone", "factual", "?") for i in range(500)
+    ]
+    modes = dict((q.id, t) for q, t in assign_modes(qs, DEFAULT_MIX))
+    grounded_think = sum(modes[q.id] for q in qs if q.format == "grounded") / 3000
+    assert abs(grounded_think - 2 / 3) < 0.03
+    assert not any(modes[q.id] for q in qs if q.format == "standalone")
+    assert dict((q.id, t) for q, t in assign_modes(qs[::-1], DEFAULT_MIX)) == modes
+    with pytest.raises(ValueError, match="does not contain"):
+        assign_modes([Question("e", "eng-1", "eng", "grounded", "x", "?")], DEFAULT_MIX[:3])
+
+
+def test_given_jobs_done_records_and_progress_callback():
+    passages = [Passage("urd-1", "urd", words(60))]
+    qs = [
+        Question("urd-1-g0", "urd-1", "urd", "grounded", "summarize", "خلاصہ؟"),
+        Question("urd-1-g1", "urd-1", "urd", "grounded", "explain", "کیوں؟"),
+    ]
+    teacher = FakeTeacher()
+    client = ChatClient("http://x", "t", post=teacher)
+    earlier = {"urd-1-g0-think": {"id": "urd-1-g0-think", "error": None, "reused": True}}
+    seen = []
+    records = generate_answers(
+        client,
+        qs,
+        passages,
+        "t",
+        jobs=[(qs[0], True), (qs[1], False)],
+        done=earlier,
+        on_record=seen.append,
+        log=lambda s: 0,
+    )
+    assert records[0]["reused"] and records[1]["id"] == "urd-1-g1-nothink"
+    assert [r["id"] for r in seen] == ["urd-1-g1-nothink"] and len(teacher.bodies) == 1

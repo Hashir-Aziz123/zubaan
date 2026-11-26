@@ -90,7 +90,8 @@ def start_teacher(model, served):
     log = OUT / f"vllm_{served}.log"
     cmd = teacher_serve_command(model, served, tensor_parallel=2, max_model_len=MAX_MODEL_LEN)
     print(" ".join(cmd))
-    proc = subprocess.Popen(cmd, stdout=open(log, "w"), stderr=subprocess.STDOUT, env=ENV, start_new_session=True)
+    with open(log, "w") as log_file:  # the server keeps its own copy of the handle
+        proc = subprocess.Popen(cmd, stdout=log_file, stderr=subprocess.STDOUT, env=ENV, start_new_session=True)
     for _ in range(240):  # up to 40 minutes: download, load, CUDA graph capture
         time.sleep(10)
         if proc.poll() is not None:
