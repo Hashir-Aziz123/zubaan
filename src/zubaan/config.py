@@ -264,6 +264,29 @@ class EvaluateConfig(BaseModel):
     )
 
 
+class ChatCheckConfig(BaseModel):
+    """Stage 4: chat-behavior check of one served model (zubaan tune check)."""
+
+    label: str = Field(description="Name of the model in the results, e.g. base or stage3")
+    server_url: str = "http://127.0.0.1:8080"
+    model: str = Field(default="model", description="Served model name sent in each request")
+    gguf: Path | None = Field(
+        default=None,
+        description="Start llama-server on this GGUF for the run (else use a running server)",
+    )
+    llama_cpp_dir: Path = Path("tools/llama.cpp-b12477")
+    llama_cpp_bin: Path | None = None
+    threads: int | None = None
+    ctx_size: int = Field(default=4096, description="llama-server context (prompt + reply)")
+    prompts: Path | None = Field(default=None, description="Prompt set (default: the packaged v1)")
+    max_prompts: int | None = Field(default=None, description="Use only the first N (smoke runs)")
+    thinking_modes: list[bool] = [True, False]
+    max_tokens_think: int = Field(default=2048, ge=1)
+    max_tokens_no_think: int = Field(default=768, ge=1)
+    workers: int = Field(default=1, ge=1, description="Requests in flight (1 for llama-server)")
+    output: Path = Path("reports/chat_check.json")
+
+
 class ProjectConfig(BaseModel):
     """Top-level config file: any section may be omitted."""
 
@@ -275,6 +298,7 @@ class ProjectConfig(BaseModel):
     export: ExportConfig | None = None
     adapt: AdaptConfig | None = None
     evaluate: EvaluateConfig | None = None
+    chat_check: ChatCheckConfig | None = None
 
 
 def load_config(path: str | Path) -> ProjectConfig:

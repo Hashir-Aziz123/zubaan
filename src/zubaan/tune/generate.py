@@ -17,6 +17,7 @@ and are checked against the evaluation texts (FLORES, Belebele) with the 8-word 
 from __future__ import annotations
 
 import json
+import math
 import random
 import re
 import statistics
@@ -54,6 +55,8 @@ KIND_HINTS = {
 }
 
 LANGUAGES = {"urd": "Urdu", "eng": "English"}
+# How a grounded request refers to the passage. The trial's 8B once wrote "اردو پاسز".
+THIS_TEXT = {"urd": "اس متن", "eng": "this text"}
 
 
 @dataclass(frozen=True)
@@ -151,7 +154,8 @@ def question_messages(passage: Passage, fmt: str, n: int) -> list[dict]:
         task = (
             f"Write {n} different requests that a user might send to an assistant together with "
             f"this passage. Each must be answerable from the passage alone and may refer to it as "
-            f'"this text" (in {language}).'
+            f'"{THIS_TEXT[passage.lang]}" ("this text"; never a transliterated English word '
+            'such as "passage").'
         )
     else:
         task = (
@@ -274,18 +278,37 @@ def generate_answers(
     no_think_sampling: Sampling = QWEN3_NO_THINKING,
     workers: int = 64,
     log: Callable[[str], None] = print,
+    jobs: Sequence[tuple[Question, bool]] | None = None,
+    done: dict[str, dict] | None = None,
+    on_record: Callable[[dict], None] | None = None,
 ) -> list[dict]:
     """One record per question and thinking mode, in input order.
 
     ``messages`` is the training conversation: the prompt plus the teacher's raw reply as the
     assistant turn (with its ``<think>`` block when thinking was on). A failed request gives a
     record with ``error`` set and no assistant turn.
+
+    ``jobs`` replaces "every question in every mode" with given ``(question, thinking)`` pairs
+    (the data mix answers each question once). ``done`` maps record ids of an interrupted run
+    to their records, which are reused; ``on_record`` receives each new record (from worker
+    threads) so the caller can save progress.
     """
     by_id = {p.id: p for p in passages}
-    jobs = [(q, t) for q in questions for t in thinking_modes]
+    if jobs is None:
+        jobs = [(q, t) for q in questions for t in thinking_modes]
+    done = done or {}
 
     def answer(job: tuple[Question, bool]) -> dict:
         q, thinking = job
+        rid = f"{q.id}-{'think' if thinking else 'nothink'}"
+        if rid in done:
+            return done[rid]
+        rec = _answer(q, thinking)
+        if on_record is not None:
+            on_record(rec)
+        return rec
+
+    def _answer(q: Question, thinking: bool) -> dict:
         request, prompt = answer_messages(q, by_id[q.passage_id])
         rec = {
             "id": f"{q.id}-{'think' if thinking else 'nothink'}",
@@ -324,6 +347,119 @@ def generate_answers(
     errors = sum(r["error"] is not None for r in records)
     log(f"answers from {teacher}: {len(records)} records, {errors} failed requests")
     return records
+
+
+# the data mix -----------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class MixSlot:
+    """How many conversations of one language, format and thinking mode to keep."""
+
+    lang: str
+    format: str
+    thinking: bool
+    count: int
+
+
+# Decided after the teacher trial (docs/decisions.md, 2026-11-26). Standalone questions are only
+# answered with thinking off: with thinking on, the teacher's reasoning named the hidden
+# background in 90 to 98% of standalone replies, which would teach the student to reason about
+# a text the user never gave. Every thinking conversation is therefore grounded.
+DEFAULT_MIX = (
+    MixSlot("urd", "grounded", True, 4000),
+    MixSlot("urd", "grounded", False, 2000),
+    MixSlot("urd", "standalone", False, 2000),
+    MixSlot("eng", "grounded", True, 1000),
+    MixSlot("eng", "grounded", False, 500),
+    MixSlot("eng", "standalone", False, 500),
+)
+
+
+def check_mix(mix: Sequence[MixSlot]) -> None:
+    """Raise on an unknown language or format, a non-positive count, a repeated slot, or a
+    standalone slot with thinking on (see ``DEFAULT_MIX``)."""
+    seen = set()
+    for s in mix:
+        if s.lang not in LANGUAGES or s.format not in FORMATS:
+            raise ValueError(f"unknown language or format in {s}")
+        if s.count < 1:
+            raise ValueError(f"count must be positive in {s}")
+        if s.format == "standalone" and s.thinking:
+            raise ValueError(
+                "standalone questions with thinking on are refused: the teacher's reasoning "
+                "names the hidden background (teacher trial, 2026-11-26)"
+            )
+        key = (s.lang, s.format, s.thinking)
+        if key in seen:
+            raise ValueError(f"slot {key} appears twice")
+        seen.add(key)
+
+
+def passage_counts(
+    mix: Sequence[MixSlot], per_format: int = 2, overgenerate: float = 1.15
+) -> dict[tuple[str, str], int]:
+    """Passages needed per (language, format). Each passage gives ``per_format`` questions and
+    each question is answered once, in one thinking mode.
+
+    passages = ceil(conversations x overgenerate / per_format). Example: 6,000 grounded Urdu
+    conversations with 15% spare for the filters, 2 questions per passage:
+    ceil(6,000 x 1.15 / 2) = 3,450 passages.
+    """
+    check_mix(mix)
+    if per_format < 1 or overgenerate < 1:
+        raise ValueError("per_format must be at least 1 and overgenerate at least 1")
+    totals: dict[tuple[str, str], int] = {}
+    for s in mix:
+        totals[(s.lang, s.format)] = totals.get((s.lang, s.format), 0) + s.count
+    return {k: math.ceil(round(v * overgenerate, 6) / per_format) for k, v in totals.items()}
+
+
+def split_by_format(
+    passages: Sequence[Passage], counts: dict[str, int]
+) -> dict[str, list[Passage]]:
+    """Consecutive slices of ``passages`` for each format, in the order of ``FORMATS``, so a
+    passage is used by one format only."""
+    out: dict[str, list[Passage]] = {}
+    start = 0
+    for fmt in FORMATS:
+        n = counts.get(fmt, 0)
+        out[fmt] = list(passages[start : start + n])
+        if len(out[fmt]) < n:
+            raise ValueError(f"need {start + n} passages, have {len(passages)}")
+        start += n
+    return out
+
+
+def shard_of(passage_id: str, n_shards: int) -> int:
+    """Which of ``n_shards`` Kaggle sessions handles a passage. Stable across runs."""
+    if n_shards < 1:
+        raise ValueError("n_shards must be at least 1")
+    return zlib.crc32(passage_id.encode("utf-8")) % n_shards
+
+
+def assign_modes(
+    questions: Sequence[Question], mix: Sequence[MixSlot], seed: int = 0
+) -> list[tuple[Question, bool]]:
+    """The thinking mode each question is answered in.
+
+    Within each language and format, the share answered with thinking on is the mix's share
+    (for grounded Urdu in ``DEFAULT_MIX``: 4,000 / 6,000 = 2/3). The choice is a hash of the
+    seed and the question id, so it does not depend on the order or on the shard.
+    """
+    check_mix(mix)
+    share: dict[tuple[str, str], float] = {}
+    for key in {(s.lang, s.format) for s in mix}:
+        slots = [s for s in mix if (s.lang, s.format) == key]
+        share[key] = sum(s.count for s in slots if s.thinking) / sum(s.count for s in slots)
+    out = []
+    for q in questions:
+        key = (q.lang, q.format)
+        if key not in share:
+            raise ValueError(f"question {q.id} is {key}, which the mix does not contain")
+        draw = zlib.crc32(f"{seed}|{q.id}".encode()) % 10_000 / 10_000
+        out.append((q, draw < share[key]))
+    return out
 
 
 # reading the results ----------------------------------------------------------------------------

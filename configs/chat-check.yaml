@@ -1,0 +1,14 @@
+# Stage 4, chunk 1: chat-behavior check on the laptop with llama-server.
+# One run per model; override the label, GGUF and output on the command line:
+#   zubaan tune check --config configs/chat-check.yaml --label stage3 \
+#     --gguf outputs/adapted-export/qwen3-1.7b-urdu-adapted-Q8_0.gguf --output reports/chat_check_stage3.json
+chat_check:
+  label: base
+  gguf: outputs/base-gguf/Qwen3-1.7B-Q8_0.gguf   # Qwen/Qwen3-1.7B-GGUF, the official file
+  server_url: http://127.0.0.1:8080
+  llama_cpp_dir: tools/llama.cpp-b12477
+  ctx_size: 4096
+  max_tokens_think: 2048
+  max_tokens_no_think: 768
+  workers: 1
+  output: reports/chat_check_base.json

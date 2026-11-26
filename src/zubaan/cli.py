@@ -37,6 +37,8 @@ adapt_app = typer.Typer(
     help="Stage 3: continued pretraining so the model learns its new tokens.", no_args_is_help=True
 )
 app.add_typer(adapt_app, name="adapt")
+tune_app = typer.Typer(help="Stage 4: restore chat behavior.", no_args_is_help=True)
+app.add_typer(tune_app, name="tune")
 
 console = Console()
 
@@ -1082,6 +1084,61 @@ def export_check(
                 f"same top token {k['same_top_p_percent']['value']:.1f}%"
             )
     console.print(f"Saved {cfg.output_dir / 'export_check.json'}")
+
+
+@tune_app.command("check")
+def tune_check(
+    config: Annotated[Path, typer.Option("--config", exists=True, help="YAML with chat_check:")],
+    label: Annotated[
+        Optional[str],  # noqa: UP045
+        typer.Option(help="Override chat_check.label"),
+    ] = None,
+    gguf: Annotated[
+        Optional[Path],  # noqa: UP045
+        typer.Option(help="Override chat_check.gguf (starts llama-server on it)"),
+    ] = None,
+    output: Annotated[
+        Optional[Path],  # noqa: UP045
+        typer.Option(help="Override chat_check.output"),
+    ] = None,
+    max_prompts: Annotated[
+        Optional[int],  # noqa: UP045
+        typer.Option(help="Use only the first N prompts (smoke run)"),
+    ] = None,
+    json_out: Annotated[bool, typer.Option("--json", help="Print the summary as JSON")] = False,
+) -> None:
+    """Chat-behavior check: answer rate with thinking on and off, reply language, loops."""
+    from zubaan.tune.chat_check import run_from_config
+
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(errors="replace")
+    cfg = _section(config, "chat_check")
+    updates = {
+        k: v
+        for k, v in {
+            "label": label,
+            "gguf": gguf,
+            "output": output,
+            "max_prompts": max_prompts,
+        }.items()
+        if v is not None
+    }
+    cfg = cfg.model_copy(update=updates)
+    try:
+        result = run_from_config(cfg, log=(lambda s: None) if json_out else console.print)
+    except (FileNotFoundError, ValueError, RuntimeError) as e:
+        raise typer.BadParameter(str(e)) from e
+    if json_out:
+        typer.echo(json.dumps(result["summary"], indent=2, ensure_ascii=False))
+        return
+    for mode, groups in result["summary"].items():
+        for lang, g in groups.items():
+            console.print(
+                f"{cfg.label} {mode} {lang}: answered {g['answered']}/{g['n']}, "
+                f"right language {g['right_language']}/{g['language_due']}, "
+                f"hit limit {g['hit_limit']}, loops {g['loops']}"
+            )
+    console.print(f"Saved {cfg.output} and {cfg.output.with_suffix('.md')}")
 
 
 @app.command()

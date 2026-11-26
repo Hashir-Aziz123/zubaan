@@ -1,0 +1,338 @@
+# Chat-behavior check, prompt set v1 (Stage 4, chunk 1).
+#
+# Written by hand, never by the teacher model, so a model is not graded on the teacher's own
+# homework. Drafted 2026-11-26 by Claude; reviewed and approved by the author (an Urdu speaker)
+# the same day, with no changes, before the baseline run.
+# Changing any prompt changes the measurement: bump the version and keep the old file.
+#
+# Fields:
+#   id          unique, never reused
+#   lang        language of the (last) user turn: urd | eng
+#   category    factual | explain | write | reason | chat | translate | multi
+#   text        a single user turn, or
+#   turns       user, assistant, user, ... (odd length, ends with the user)
+#   reply_lang  language the answer should be in (default: lang); null = not checked
+#   note        English gloss for readers; not sent to the model
+
+version: 1
+prompts:
+  # Urdu: factual -------------------------------------------------------------------------------
+  - id: ur-fact-01
+    lang: urd
+    category: factual
+    text: پاکستان کا دارالحکومت کیا ہے؟
+    note: What is the capital of Pakistan? (the Stage 3 Ollama and vLLM prompt)
+  - id: ur-fact-02
+    lang: urd
+    category: factual
+    text: لاہور کس صوبے میں ہے اور اس صوبے کا دارالحکومت کون سا شہر ہے؟
+    note: Which province is Lahore in, and which city is that province's capital?
+  - id: ur-fact-03
+    lang: urd
+    category: factual
+    text: پانی کتنے درجے سینٹی گریڈ پر ابلتا ہے؟
+    note: At how many degrees Celsius does water boil?
+  - id: ur-fact-04
+    lang: urd
+    category: factual
+    text: ایک سال میں کتنے مہینے ہوتے ہیں اور سب سے چھوٹا مہینہ کون سا ہے؟
+    note: How many months are in a year, and which is the shortest?
+  - id: ur-fact-05
+    lang: urd
+    category: factual
+    text: علامہ محمد اقبال کون تھے؟
+    note: Who was Allama Muhammad Iqbal?
+  - id: ur-fact-06
+    lang: urd
+    category: factual
+    text: زمین سورج کے گرد ایک چکر کتنے دنوں میں پورا کرتی ہے؟
+    note: In how many days does the Earth complete one orbit of the Sun?
+  - id: ur-fact-07
+    lang: urd
+    category: factual
+    text: دنیا کا سب سے بڑا سمندر کون سا ہے؟
+    note: Which is the largest ocean in the world?
+  - id: ur-fact-08
+    lang: urd
+    category: factual
+    text: انسانی جسم میں خون پمپ کرنے والا عضو کون سا ہے؟
+    note: Which organ pumps blood in the human body?
+
+  # Urdu: explain -------------------------------------------------------------------------------
+  - id: ur-explain-01
+    lang: urd
+    category: explain
+    text: آسمان نیلا کیوں نظر آتا ہے؟
+    note: Why does the sky look blue?
+  - id: ur-explain-02
+    lang: urd
+    category: explain
+    text: بارش کیسے ہوتی ہے؟ آسان الفاظ میں سمجھائیں۔
+    note: How does rain happen? Explain in simple words.
+  - id: ur-explain-03
+    lang: urd
+    category: explain
+    text: ہمیں نیند کی ضرورت کیوں ہوتی ہے؟
+    note: Why do we need sleep?
+  - id: ur-explain-04
+    lang: urd
+    category: explain
+    text: پودے اپنی خوراک کیسے بناتے ہیں؟
+    note: How do plants make their food?
+  - id: ur-explain-05
+    lang: urd
+    category: explain
+    text: سردیوں میں دن چھوٹے کیوں ہو جاتے ہیں؟
+    note: Why do the days get shorter in winter?
+  - id: ur-explain-06
+    lang: urd
+    category: explain
+    text: مہنگائی کیا ہوتی ہے اور یہ کیوں بڑھتی ہے؟
+    note: What is inflation and why does it rise?
+  - id: ur-explain-07
+    lang: urd
+    category: explain
+    text: کمپیوٹر وائرس کیا ہوتا ہے؟
+    note: What is a computer virus?
+
+  # Urdu: writing and instructions --------------------------------------------------------------
+  - id: ur-write-01
+    lang: urd
+    category: write
+    text: اردو زبان کے بارے میں تین جملے لکھیں۔
+    note: Write three sentences about the Urdu language. (the Stage 3 Ollama prompt)
+  - id: ur-write-02
+    lang: urd
+    category: write
+    text: اپنے دوست کو اس کی سالگرہ پر مبارک باد کا ایک مختصر پیغام لکھیں۔
+    note: Write a short birthday greeting to a friend.
+  - id: ur-write-03
+    lang: urd
+    category: write
+    text: بارش کے موسم پر چار سطروں کی ایک چھوٹی سی نظم لکھیں۔
+    note: Write a short four-line poem about the rainy season.
+  - id: ur-write-04
+    lang: urd
+    category: write
+    text: اسکول کے پرنسپل کے نام دو دن کی چھٹی کے لیے ایک درخواست لکھیں۔
+    note: Write an application to the school principal for two days of leave.
+  - id: ur-write-05
+    lang: urd
+    category: write
+    text: صحت مند رہنے کے پانچ مشورے فہرست کی صورت میں لکھیں۔
+    note: Write five tips for staying healthy, as a list.
+  - id: ur-write-06
+    lang: urd
+    category: write
+    text: ایک چھوٹی سی کہانی لکھیں جس میں ایک بلی اور ایک چڑیا دوست بن جاتی ہیں۔
+    note: Write a short story in which a cat and a sparrow become friends.
+  - id: ur-write-07
+    lang: urd
+    category: write
+    text: 'اس جملے کو زیادہ شائستہ انداز میں دوبارہ لکھیں: "مجھے ابھی یہ کام کر کے دو۔"'
+    note: 'Rewrite this sentence more politely: "Do this work for me right now."'
+  - id: ur-write-08
+    lang: urd
+    category: write
+    text: چائے بنانے کا طریقہ مرحلہ وار بتائیں۔
+    note: Explain step by step how to make tea.
+
+  # Urdu: reasoning and arithmetic --------------------------------------------------------------
+  - id: ur-reason-01
+    lang: urd
+    category: reason
+    text: اگر ایک قلم کی قیمت 25 روپے ہے تو 8 قلم کتنے روپے کے ہوں گے؟
+    note: If one pen costs 25 rupees, how much do 8 pens cost? (200)
+  - id: ur-reason-02
+    lang: urd
+    category: reason
+    text: احمد کے پاس 15 سیب تھے۔ اس نے 6 سیب اپنی بہن کو دیے اور پھر 4 سیب اور خریدے۔ اب اس کے پاس کتنے سیب ہیں؟
+    note: Ahmed had 15 apples, gave 6 to his sister, then bought 4 more. How many now? (13)
+  - id: ur-reason-03
+    lang: urd
+    category: reason
+    text: ایک ٹرین 60 کلومیٹر فی گھنٹہ کی رفتار سے چلتی ہے۔ 180 کلومیٹر کا فاصلہ طے کرنے میں اسے کتنا وقت لگے گا؟
+    note: A train goes 60 km per hour. How long does it take for 180 km? (3 hours)
+  - id: ur-reason-04
+    lang: urd
+    category: reason
+    text: اگر آج منگل ہے تو آج سے دس دن بعد کون سا دن ہوگا؟
+    note: If today is Tuesday, what day is it ten days from now? (Friday)
+  - id: ur-reason-05
+    lang: urd
+    category: reason
+    text: علی سارہ سے لمبا ہے اور سارہ زینب سے لمبی ہے۔ ان تینوں میں سب سے چھوٹے قد کا کون ہے؟
+    note: Ali is taller than Sara and Sara is taller than Zainab. Who is the shortest? (Zainab)
+  - id: ur-reason-06
+    lang: urd
+    category: reason
+    text: ایک دکان دار نے 400 روپے کی چیز پر 25 فیصد رعایت دی۔ گاہک کو کتنے روپے دینے ہوں گے؟
+    note: A shopkeeper gives 25% off an item of 400 rupees. How much does the customer pay? (300)
+
+  # Urdu: conversation and advice ---------------------------------------------------------------
+  - id: ur-chat-01
+    lang: urd
+    category: chat
+    text: السلام علیکم! آپ کیسے ہیں؟
+    note: Peace be upon you! How are you?
+  - id: ur-chat-02
+    lang: urd
+    category: chat
+    text: میرے امتحان اگلے ہفتے ہیں اور مجھے بہت گھبراہٹ ہو رہی ہے۔ میں کیا کروں؟
+    note: My exams are next week and I am very nervous. What should I do?
+  - id: ur-chat-03
+    lang: urd
+    category: chat
+    text: میں اردو ادب پڑھنا شروع کرنا چاہتا ہوں۔ کن کتابوں سے آغاز کروں؟
+    note: I want to start reading Urdu literature. Which books should I begin with?
+  - id: ur-chat-04
+    lang: urd
+    category: chat
+    text: گرمیوں میں بجلی کا بل کم کرنے کے کچھ طریقے بتائیں۔
+    note: Suggest some ways to lower the electricity bill in summer.
+  - id: ur-chat-05
+    lang: urd
+    category: chat
+    text: کیا آپ مجھے کوئی اچھا سا لطیفہ سنا سکتے ہیں؟
+    note: Can you tell me a good joke?
+
+  # Urdu: translation ---------------------------------------------------------------------------
+  - id: ur-translate-01
+    lang: urd
+    category: translate
+    text: 'اس جملے کا انگریزی میں ترجمہ کریں: "کل صبح موسم بہت خوشگوار تھا۔"'
+    reply_lang: null
+    note: 'Translate into English: "The weather was very pleasant yesterday morning." (mixed reply expected)'
+  - id: ur-translate-02
+    lang: urd
+    category: translate
+    text: 'اس انگریزی جملے کا اردو میں ترجمہ کریں: "Knowledge is power."'
+    note: 'Translate this English sentence into Urdu: "Knowledge is power."'
+
+  # Urdu: two-turn conversations ----------------------------------------------------------------
+  - id: ur-multi-01
+    lang: urd
+    category: multi
+    turns:
+      - میرا نام عمران ہے اور میں کراچی میں رہتا ہوں۔
+      - خوشی ہوئی عمران! کراچی ایک بڑا اور مصروف شہر ہے۔ میں آپ کی کیا مدد کر سکتا ہوں؟
+      - میں کس شہر میں رہتا ہوں؟
+    note: '"My name is Imran and I live in Karachi." / "..." / "Which city do I live in?"'
+  - id: ur-multi-02
+    lang: urd
+    category: multi
+    turns:
+      - مجھے پاستا بنانا سیکھنا ہے۔
+      - ضرور! پاستا بنانا آسان ہے۔ آپ کس قسم کا پاستا بنانا چاہتے ہیں، سادہ یا سبزیوں والا؟
+      - سبزیوں والا، لیکن اس میں ٹماٹر نہ ہوں۔
+    note: '"I want to learn to make pasta." / "Plain or with vegetables?" / "With vegetables, but no tomatoes."'
+  - id: ur-multi-03
+    lang: urd
+    category: multi
+    turns:
+      - ایک سے پانچ تک گنتی لکھیں۔
+      - ایک، دو، تین، چار، پانچ۔
+      - اب انہیں الٹی ترتیب میں لکھیں۔
+    note: '"Count from one to five." / "One, two, three, four, five." / "Now write them in reverse order."'
+  - id: ur-multi-04
+    lang: urd
+    category: multi
+    turns:
+      - What is photosynthesis?
+      - Photosynthesis is the process by which green plants use sunlight, water and carbon dioxide to make sugar for energy, releasing oxygen.
+      - یہی بات اردو میں سمجھائیں۔
+    note: An English exchange, then "Explain the same thing in Urdu."
+
+  # English control -----------------------------------------------------------------------------
+  - id: en-fact-01
+    lang: eng
+    category: factual
+    text: What is the capital of France?
+  - id: en-fact-02
+    lang: eng
+    category: factual
+    text: Who wrote Romeo and Juliet?
+  - id: en-fact-03
+    lang: eng
+    category: factual
+    text: How many continents are there, and which is the largest?
+  - id: en-fact-04
+    lang: eng
+    category: factual
+    text: What gas do plants take in from the air to make their food?
+  - id: en-explain-01
+    lang: eng
+    category: explain
+    text: Why is the sky blue?
+  - id: en-explain-02
+    lang: eng
+    category: explain
+    text: How does a vaccine work? Explain it simply.
+  - id: en-explain-03
+    lang: eng
+    category: explain
+    text: What causes the seasons on Earth?
+  - id: en-explain-04
+    lang: eng
+    category: explain
+    text: What is inflation, in two or three sentences?
+  - id: en-write-01
+    lang: eng
+    category: write
+    text: Write a short thank-you note to a teacher.
+  - id: en-write-02
+    lang: eng
+    category: write
+    text: Write a four-line poem about the sea.
+  - id: en-write-03
+    lang: eng
+    category: write
+    text: Give five tips for staying focused while studying, as a list.
+  - id: en-write-04
+    lang: eng
+    category: write
+    text: 'Rewrite this more politely: "Send me the report now."'
+  - id: en-reason-01
+    lang: eng
+    category: reason
+    text: If a book costs 12 dollars, how much do 7 books cost?
+    note: (84)
+  - id: en-reason-02
+    lang: eng
+    category: reason
+    text: A train leaves at 9:40 and the journey takes 2 hours and 35 minutes. When does it arrive?
+    note: (12:15)
+  - id: en-reason-03
+    lang: eng
+    category: reason
+    text: If today is Monday, what day of the week will it be in 15 days?
+    note: (Tuesday)
+  - id: en-reason-04
+    lang: eng
+    category: reason
+    text: Tom is older than Ali, and Ali is older than Sara. Who is the youngest?
+    note: (Sara)
+  - id: en-chat-01
+    lang: eng
+    category: chat
+    text: Hi! How are you today?
+  - id: en-chat-02
+    lang: eng
+    category: chat
+    text: I have trouble sleeping at night. Do you have any advice?
+  - id: en-multi-01
+    lang: eng
+    category: multi
+    turns:
+      - My favorite color is green.
+      - Nice choice! Green is often linked with nature and calm. Is there anything I can help you with?
+      - What is my favorite color?
+  - id: en-multi-02
+    lang: eng
+    category: multi
+    turns:
+      - Translate "Good morning" into Urdu.
+      - صبح بخیر
+      - Now translate "Good night".
+    reply_lang: null
+    note: The answer is Urdu inside an English reply, so the language is not checked.
