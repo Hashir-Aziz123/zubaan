@@ -287,6 +287,59 @@ class ChatCheckConfig(BaseModel):
     output: Path = Path("reports/chat_check.json")
 
 
+class TuneConfig(BaseModel):
+    """Stage 4: chat SFT of the adapted model (zubaan tune run | merge)."""
+
+    # Inputs
+    model_path: Path = Field(
+        default=Path("outputs/adapted/model"),
+        description="Merged Stage 3 model folder (Kaggle: output of notebook 07)",
+    )
+    train_file: Path = Field(
+        default=Path("data/tune/conversations.jsonl"),
+        description="Filtered conversations, one JSON record per line (zubaan tune filter)",
+    )
+    max_len: int = Field(default=4096, ge=64, description="Tokens per packed row")
+    val_share: float = Field(
+        default=0.02, ge=0, lt=1, description="Share of passages held out for the eval loss"
+    )
+    # Training
+    output_dir: Path = Path("outputs/tuned")
+    epochs: float = Field(default=2.0, gt=0)
+    micro_batch_size: int = Field(default=1, ge=1, description="Packed rows per forward pass")
+    grad_accum: int = Field(default=16, ge=1)
+    lr_lora: float = 1e-4
+    train_new_rows: bool = Field(
+        default=False,
+        description="Also train the Stage 2 new embedding rows (plan: start frozen)",
+    )
+    lr_new_rows: float = 5e-5
+    warmup_steps: int = 20
+    min_lr_ratio: float = 0.1
+    weight_decay: float = 0.0
+    max_grad_norm: float = 1.0
+    lora_rank: int = 64
+    lora_alpha: int = 128
+    lora_dropout: float = 0.05
+    precision: str = Field(default="fp16", description="fp16 (autocast) | fp32")
+    gradient_checkpointing: bool = True
+    device: str = "cuda"
+    seed: int = 0
+    # Monitoring, checkpoints, resume
+    log_every: int = 5
+    eval_every: int = 50
+    checkpoint_every: int = 50
+    keep_checkpoints: int = 2
+    milestone_every: int = 0
+    resume: bool = True
+    hub_repo: str | None = Field(
+        default=None, description="Private Hub repo for checkpoints (needs HF_TOKEN)"
+    )
+    hub_private: bool = True
+    # Merge (zubaan tune merge)
+    merged_dtype: str = "bfloat16"
+
+
 class ProjectConfig(BaseModel):
     """Top-level config file: any section may be omitted."""
 
@@ -299,6 +352,7 @@ class ProjectConfig(BaseModel):
     adapt: AdaptConfig | None = None
     evaluate: EvaluateConfig | None = None
     chat_check: ChatCheckConfig | None = None
+    tune: TuneConfig | None = None
 
 
 def load_config(path: str | Path) -> ProjectConfig:

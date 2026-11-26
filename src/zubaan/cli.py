@@ -1141,6 +1141,85 @@ def tune_check(
     console.print(f"Saved {cfg.output} and {cfg.output.with_suffix('.md')}")
 
 
+def _tune_config(config: Path, model_path: Path | None, train_file: Path | None):
+    cfg = _section(config, "tune")
+    updates = {k: v for k, v in {"model_path": model_path, "train_file": train_file}.items() if v}
+    return cfg.model_copy(update=updates)
+
+
+@tune_app.command("run")
+def tune_run(
+    config: Annotated[Path, typer.Option("--config", exists=True, help="YAML with tune:")],
+    model_path: Annotated[
+        Optional[Path],  # noqa: UP045
+        typer.Option(help="Override tune.model_path (the merged Stage 3 model)"),
+    ] = None,
+    train_file: Annotated[
+        Optional[Path],  # noqa: UP045
+        typer.Option(help="Override tune.train_file (filtered conversations JSONL)"),
+    ] = None,
+    steps: Annotated[
+        Optional[int],  # noqa: UP045
+        typer.Option(help="Stop after this many steps (smoke runs); default is the full schedule"),
+    ] = None,
+    stop_at: Annotated[
+        Optional[int],  # noqa: UP045
+        typer.Option(help="Stop when this global step is reached (a later run can continue)"),
+    ] = None,
+    json_out: Annotated[bool, typer.Option("--json", help="Print the summary as JSON")] = False,
+) -> None:
+    """Chat SFT: LoRA on the Stage 3 model, loss on the assistant's reply only. Needs a GPU.
+
+    Checkpoints go to <output_dir>/checkpoints (and the private Hub repo tune.hub_repo if set);
+    a run resumes from the newest one. The log is <output_dir>/train_log.jsonl.
+    """
+    from zubaan.tune.sft import run_tune
+
+    cfg = _tune_config(config, model_path, train_file)
+    summary = run_tune(
+        cfg,
+        log=(lambda s: None) if json_out else console.print,
+        max_steps=steps,
+        stop_at_step=stop_at,
+    )
+    if json_out:
+        typer.echo(json.dumps(summary, indent=2, ensure_ascii=False))
+        return
+    done = "finished" if summary["finished"] else "stopped early"
+    console.print(f"Training {done} at step {summary['final_step']} of {summary['total_steps']}.")
+    for e in summary["evals"][-1:]:
+        console.print(f"Last eval: {e['eval']}")
+
+
+@tune_app.command("merge")
+def tune_merge(
+    config: Annotated[Path, typer.Option("--config", exists=True, help="YAML with tune:")],
+    model_path: Annotated[
+        Optional[Path],  # noqa: UP045
+        typer.Option(help="Override tune.model_path (the merged Stage 3 model)"),
+    ] = None,
+    checkpoint: Annotated[
+        Optional[Path],  # noqa: UP045
+        typer.Option(help="Checkpoint folder (default: newest in <output_dir>/checkpoints)"),
+    ] = None,
+    out: Annotated[
+        Optional[Path],  # noqa: UP045
+        typer.Option(help="Where to save the merged model (default <output_dir>/model)"),
+    ] = None,
+    json_out: Annotated[bool, typer.Option("--json", help="Print the summary as JSON")] = False,
+) -> None:
+    """Fold the chat LoRA into the Stage 3 model, check the logits and save the folder."""
+    from zubaan.tune.sft import merge_tuned
+
+    cfg = _tune_config(config, model_path, None)
+    summary = merge_tuned(cfg, checkpoint, out, log=(lambda s: None) if json_out else console.print)
+    if json_out:
+        typer.echo(json.dumps(summary, indent=2, ensure_ascii=False))
+        return
+    console.print(f"Saved: {summary['model_dir']} (trained to step {summary['step']})")
+    console.print("Next: the chat check and the Stage 3 quality checks on it (stage 4, chunk 7).")
+
+
 @app.command()
 def bench() -> None:
     """Benchmark running servers with tokenizer-fair metrics."""

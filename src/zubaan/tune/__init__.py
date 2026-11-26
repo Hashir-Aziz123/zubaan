@@ -6,6 +6,6 @@ Modules:
 - filters.py: split a reply into reasoning and answer; loop and source-mention checks.
 - chat_check.py: answer rate with thinking on and off, reply language and loops on a fixed
   hand-written prompt set (prompts/chat_check_v1.yaml), against any served model (chunk 1).
-
-Planned: data.py (chat rendering, masking, packing), sft.py (training loop).
+- data.py: render conversations with the model's chat template, mask prompts, pack rows.
+- sft.py: LoRA SFT on the Stage 3 model (reply-only loss, resume, Hub checkpoints), merge.
 """
