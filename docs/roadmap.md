@@ -64,11 +64,11 @@ Optional follow-up:
 Added 2026-11-25. Stage 3's plain-text training left the adapted model unable to answer with thinking on (3 of 4 prompts in Ollama) and none of its checks caught it. A short instruction-tuning step on generated Urdu and English conversations, with thinking traces from a larger Qwen3 teacher, repairs this before drafters are built on the model. Full plan: `docs/stage4-plan.md`. Decisions: `docs/decisions.md`, 2026-11-25. Stage numbers changed on that date: draft was Stage 4 and is now 5; bench and release was 5 and is now 6.
 
 - [x] Chunk 0: teacher trial (notebook 12, 2026-11-26): Qwen3-14B-AWQ picked; standalone questions only with thinking off; mix of 10,000 conversations fixed (`docs/decisions.md`)
-- [ ] Chunk 1: chat-behavior check (answer rate with thinking on and off, Urdu-script share, closed think blocks, loops) on a hand-written prompt set; baseline for the base and Stage 3 models. `zubaan tune check` and prompt set v1 (approved by the author) ready 2026-11-26; baseline runs on the laptop in progress
+- [ ] Chunk 1: chat-behavior check (answer rate with thinking on and off, Urdu-script share, closed think blocks, loops) on a hand-written prompt set; baseline for the base and Stage 3 models. `zubaan tune check` and prompt set v1 (approved by the author) ready 2026-11-26. The laptop was too slow and short of memory for the baseline, so the base and Stage 3 baselines run in the chunk 7 notebook on Kaggle
 - [ ] Chunk 2: prompt generation grounded in Urdu Wikipedia passages, contamination guard. Chunks 2 and 3 run together in notebook 13 (2 shards)
 - [ ] Chunk 3: teacher responses with and without thinking (vLLM on Kaggle)
 - [ ] Chunk 4: filters with counts, and 100 to 200 conversations read by a person
-- [ ] Chunk 5: SFT code (chat template rendering, assistant-only loss, LoRA, resume), tested on a tiny model
+- [x] Chunk 5: SFT code (chat template rendering, assistant-only loss, packing with a leak check, LoRA, resume, merge), tested on a tiny model (`zubaan tune run | merge`, 2026-11-26)
 - [ ] Chunk 6: smoke and main SFT run on a T4, merge and verify
 - [ ] Chunk 7: evaluation against the success checks (chat behavior plus the Stage 3 quality protocol)
 - [ ] Chunk 8: re-export (GGUF parity, Q4_K_M and Q8_0, Ollama, vLLM), chat check on the quantized file
