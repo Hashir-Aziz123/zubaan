@@ -66,7 +66,14 @@ print({k: v for k, v in english_meta.items() if k != "source"})
 PASSAGES = """
 import json
 
-from zubaan.tune.generate import DEFAULT_MIX, passage_counts, sample_passages, shard_of, split_by_format, to_jsonl
+from zubaan.tune.generate import (
+    DEFAULT_MIX,
+    passage_counts,
+    sample_passages,
+    shard_of,
+    split_by_format,
+    to_jsonl,
+)
 
 counts = passage_counts(DEFAULT_MIX, PER_FORMAT, OVERGENERATE)
 print("passages needed (all shards):", counts)
