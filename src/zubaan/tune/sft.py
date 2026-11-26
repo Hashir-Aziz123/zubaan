@@ -615,3 +615,54 @@ def merge_tuned(
     )
     log(f"Saved the merged model to {out} (step {step}, max logit difference {max_diff:.1e})")
     return {"model_dir": str(out), "step": step, "merge_max_logit_diff": max_diff, "metadata": meta}
+
+
+def quick_probe(
+    model_dir: Path,
+    n_per_lang: int = 2,
+    thinking_modes: Sequence[bool] = (True, False),
+    max_new_tokens: int = 1024,
+    device: str = "cuda",
+    log: Callable[[str], None] = print,
+) -> list[dict]:
+    """A first look right after training: greedy replies to the first chat-check prompts.
+
+    Uses Transformers ``generate`` on the saved folder, so it needs no server. It is a smoke
+    signal (does thinking mode answer again?), not the chunk 7 evaluation, which runs the whole
+    prompt set through vLLM for every model.
+    """
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    from zubaan.tune.chat_check import load_prompts, score_reply
+
+    tok = AutoTokenizer.from_pretrained(model_dir)
+    dtype = torch.float16 if device.startswith("cuda") else torch.float32
+    model = AutoModelForCausalLM.from_pretrained(model_dir, dtype=dtype).to(device).eval()
+    prompts, _ = load_prompts()
+    chosen = [p for p in prompts if p.lang == "urd" and len(p.turns) == 1][:n_per_lang]
+    chosen += [p for p in prompts if p.lang == "eng" and len(p.turns) == 1][:n_per_lang]
+    out = []
+    for p in chosen:
+        for thinking in thinking_modes:
+            text = tok.apply_chat_template(
+                p.messages(), tokenize=False, add_generation_prompt=True, enable_thinking=thinking
+            )
+            ids = torch.tensor([tok.encode(text, add_special_tokens=False)], device=device)
+            with torch.no_grad():
+                gen = model.generate(
+                    ids,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    eos_token_id=tok.eos_token_id,
+                    pad_token_id=tok.pad_token_id,
+                )[0, ids.shape[1] :].tolist()
+            stopped = bool(gen) and gen[-1] == tok.eos_token_id
+            reply = tok.decode(gen, skip_special_tokens=True)
+            flags = score_reply(reply, "stop" if stopped else "length", p.reply_lang)
+            out.append({"id": p.id, "thinking": thinking, "reply": reply, **flags})
+            log(
+                f"{p.id} thinking={'on' if thinking else 'off'}: answered={flags['answered']} "
+                f"right_language={flags['right_language']} tokens={len(gen)}"
+            )
+    return out
