@@ -63,7 +63,7 @@ Optional follow-up:
 
 Added 2026-11-25. Stage 3's plain-text training left the adapted model unable to answer with thinking on (3 of 4 prompts in Ollama) and none of its checks caught it. A short instruction-tuning step on generated Urdu and English conversations, with thinking traces from a larger Qwen3 teacher, repairs this before drafters are built on the model. Full plan: `docs/stage4-plan.md`. Decisions: `docs/decisions.md`, 2026-11-25. Stage numbers changed on that date: draft was Stage 4 and is now 5; bench and release was 5 and is now 6.
 
-- [ ] Chunk 0: teacher trial on Kaggle (Qwen3-8B, or a 4-bit 14B), about 50 Urdu passages, read by the author; pick the teacher and confirm the data mix
+- [ ] Chunk 0: teacher trial on Kaggle (Qwen3-8B, or a 4-bit 14B), about 50 Urdu passages, read by the author; pick the teacher and confirm the data mix. Code (`tune/client.py`, `tune/generate.py`, `tune/filters.py`) and notebook 12 ready 2026-11-26; the run and the reading are pending
 - [ ] Chunk 1: chat-behavior check (answer rate with thinking on and off, Urdu-script share, closed think blocks, loops) on a hand-written prompt set; baseline for the base and Stage 3 models
 - [ ] Chunk 2: prompt generation grounded in Urdu Wikipedia passages, contamination guard
 - [ ] Chunk 3: teacher responses with and without thinking (vLLM on Kaggle)

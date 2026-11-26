@@ -1,6 +1,6 @@
 # Stage 4 plan: restore chat behavior (instruction tuning with generated data)
 
-Draft, 2026-11-25. Nothing is built yet. Decisions so far are recorded in `docs/decisions.md` ("Stage 4: restore chat behavior", 2026-11-25). Stage numbers changed on that date: the drafter stage is now Stage 5, and benchmarks and release are Stage 6.
+Draft, 2026-11-25. Chunk 0 code and notebook ready 2026-11-26. Decisions so far are recorded in `docs/decisions.md` ("Stage 4: restore chat behavior", 2026-11-25). Stage numbers changed on that date: the drafter stage is now Stage 5, and benchmarks and release are Stage 6.
 
 ## Why this stage exists
 
@@ -69,7 +69,7 @@ Measured on a held-out, hand-written set of chat prompts (Urdu and English), gre
 
 Each chunk has one deliverable and a done criterion.
 
-0. **Teacher trial** (Kaggle, about 1 GPU hour). Run Qwen3-8B (and, if 8B is weak, a 4-bit 14B) on about 50 Urdu passages: generate questions and answers with and without thinking. **Done when** the author has read the outputs and picked the teacher, and the data mix and size are confirmed.
+0. **Teacher trial** (Kaggle, about 1 to 1.5 GPU hours, notebook 12). Qwen3-8B and Qwen3-14B-AWQ, both split over the two T4s, answer the same questions about 50 Urdu passages, with and without thinking, in two formats (grounded and standalone, see `docs/decisions.md`, 2026-11-26). **Done when** the author has read the outputs and picked the teacher, and the data mix and size are confirmed.
 1. **Chat-behavior check** (laptop code, then a short run). A command that runs a fixed prompt set through a model server and reports, per mode, the answer rate, Urdu-script share, closed think blocks and loops. It also writes the hand-written prompt set. Run it on the base and Stage 3 models to get a measured baseline (base Q4_K_M from Qwen's official GGUF, through Ollama or llama.cpp on the laptop). **Done when** the baseline numbers are in `docs/decisions.md`.
 2. **Prompt generation** (code plus Kaggle). Passages are sampled from the training split; the teacher writes questions; the contamination guard is applied. **Done when** there is a prompt file with counts.
 3. **Response generation** (Kaggle, a few GPU hours). The teacher answers with thinking on and off, batched in vLLM, and saves JSONL with metadata (teacher, mode, passage id). **Done when** the target count is reached.
