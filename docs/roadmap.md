@@ -69,8 +69,8 @@ Added 2026-11-25. Stage 3's plain-text training left the adapted model unable to
 - [ ] Chunk 3: teacher responses with and without thinking (vLLM on Kaggle)
 - [ ] Chunk 4: filters with counts, and 100 to 200 conversations read by a person. `zubaan tune filter` ready 2026-11-26 (tested on the trial's answers); waiting for notebook 13's data and the read
 - [x] Chunk 5: SFT code (chat template rendering, assistant-only loss, packing with a leak check, LoRA, resume, merge), tested on a tiny model (`zubaan tune run | merge`, 2026-11-26)
-- [ ] Chunk 6: smoke and main SFT run on a T4, merge and verify
-- [ ] Chunk 7: evaluation against the success checks (chat behavior plus the Stage 3 quality protocol)
+- [ ] Chunk 6: smoke and main SFT run on a T4, merge and verify. Notebook 14 ready 2026-11-26 (tested end to end on a tiny model with a fake Hub)
+- [ ] Chunk 7: evaluation against the success checks (chat behavior plus the Stage 3 quality protocol). Notebook 15 ready 2026-11-26: chat check on base, Stage 3 and Stage 4 through vLLM (this is also the baseline), quality on Stage 3 and Stage 4
 - [ ] Chunk 8: re-export (GGUF parity, Q4_K_M and Q8_0, Ollama, vLLM), chat check on the quantized file
 - [ ] Chunk 9: write-up, report section, scope note (tested on Qwen3 only)
 

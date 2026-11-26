@@ -8,5 +8,6 @@ Modules:
   hand-written prompt set (prompts/chat_check_v1.yaml), against any served model (chunk 1).
 - curate.py: filter and balance the generated conversations, sample them for a person (chunk 4).
 - data.py: render conversations with the model's chat template, mask prompts, pack rows.
+- evaluate.py: the plan's success checks as PASS or FAIL (chunk 7).
 - sft.py: LoRA SFT on the Stage 3 model (reply-only loss, resume, Hub checkpoints), merge.
 """
