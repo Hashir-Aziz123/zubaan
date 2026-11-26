@@ -61,7 +61,8 @@ src/zubaan/
   adapt/        stage 3: data.py (token blocks), params.py (new rows + LoRA), cpt.py (loop),
                 pipeline.py, finalize.py (merge, save, verify), evaluate.py (score model folders, checks)
   tune/         stage 4: client.py (OpenAI-compatible server client), generate.py, filters.py,
-                chat_check.py (+ prompts/chat_check_v1.yaml), data.py (render, mask, pack),
+                chat_check.py (+ prompts/chat_check_v1.yaml), curate.py (filter, balance, review
+                sample), data.py (render, mask, pack),
                 sft.py (LoRA SFT loop, merge)
   draft/        stage 5: distill.py, ngram.py (planned)
   bench/        stage 6: runner.py, quality.py (planned)

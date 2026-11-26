@@ -67,7 +67,7 @@ Added 2026-11-25. Stage 3's plain-text training left the adapted model unable to
 - [ ] Chunk 1: chat-behavior check (answer rate with thinking on and off, Urdu-script share, closed think blocks, loops) on a hand-written prompt set; baseline for the base and Stage 3 models. `zubaan tune check` and prompt set v1 (approved by the author) ready 2026-11-26. The laptop was too slow and short of memory for the baseline, so the base and Stage 3 baselines run in the chunk 7 notebook on Kaggle
 - [ ] Chunk 2: prompt generation grounded in Urdu Wikipedia passages, contamination guard. Chunks 2 and 3 run together in notebook 13 (2 shards)
 - [ ] Chunk 3: teacher responses with and without thinking (vLLM on Kaggle)
-- [ ] Chunk 4: filters with counts, and 100 to 200 conversations read by a person
+- [ ] Chunk 4: filters with counts, and 100 to 200 conversations read by a person. `zubaan tune filter` ready 2026-11-26 (tested on the trial's answers); waiting for notebook 13's data and the read
 - [x] Chunk 5: SFT code (chat template rendering, assistant-only loss, packing with a leak check, LoRA, resume, merge), tested on a tiny model (`zubaan tune run | merge`, 2026-11-26)
 - [ ] Chunk 6: smoke and main SFT run on a T4, merge and verify
 - [ ] Chunk 7: evaluation against the success checks (chat behavior plus the Stage 3 quality protocol)
