@@ -287,6 +287,26 @@ class ChatCheckConfig(BaseModel):
     output: Path = Path("reports/chat_check.json")
 
 
+class TuneFilterConfig(BaseModel):
+    """Stage 4: filter and balance the generated conversations (zubaan tune filter)."""
+
+    answers: list[Path] = Field(
+        default=[
+            Path("reports/tune_data_shard0/answers.jsonl"),
+            Path("reports/tune_data_shard1/answers.jsonl"),
+        ],
+        description="answers.jsonl of every generation shard (notebook 13)",
+    )
+    out_dir: Path = Path("data/tune")
+    review_n: int = Field(default=150, ge=1, description="Conversations sampled for a person")
+    near_threshold: float = Field(
+        default=0.6, gt=0, le=1, description="Word-set Jaccard that counts as a chat-check copy"
+    )
+    min_answer_words: int = Field(default=3, ge=1)
+    prompts: Path | None = Field(default=None, description="Chat-check set (default: v1)")
+    seed: int = 0
+
+
 class TuneConfig(BaseModel):
     """Stage 4: chat SFT of the adapted model (zubaan tune run | merge)."""
 
@@ -352,6 +372,7 @@ class ProjectConfig(BaseModel):
     adapt: AdaptConfig | None = None
     evaluate: EvaluateConfig | None = None
     chat_check: ChatCheckConfig | None = None
+    tune_filter: TuneFilterConfig | None = None
     tune: TuneConfig | None = None
 
 

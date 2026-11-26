@@ -81,3 +81,15 @@ _SOURCE_UR = re.compile(
 def mentions_source(text: str) -> bool:
     """True if the text refers to a passage, text, article or background it was given."""
     return bool(_SOURCE_EN.search(text) or _SOURCE_UR.search(text))
+
+
+# A letter of the Arabic script directly next to a Latin letter, inside one word. Urdu answers
+# often add an English term in brackets, "(mutation)", which is fine; a word such as "سULTAN" or
+# "تómہ" is a decoding glitch of the teacher and must not be trained on.
+_MIXED_WORD = re.compile(r"[؀-ۿݐ-ݿ][A-Za-zÀ-ɏ]|[A-Za-zÀ-ɏ][؀-ۿݐ-ݿ]")
+
+
+def mixed_script_word(text: str) -> str | None:
+    """The first piece of text where Arabic-script and Latin letters touch, or None."""
+    m = _MIXED_WORD.search(text)
+    return text[max(0, m.start() - 10) : m.end() + 10] if m else None

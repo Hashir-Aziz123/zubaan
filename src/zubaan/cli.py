@@ -1141,6 +1141,51 @@ def tune_check(
     console.print(f"Saved {cfg.output} and {cfg.output.with_suffix('.md')}")
 
 
+@tune_app.command("filter")
+def tune_filter(
+    config: Annotated[Path, typer.Option("--config", exists=True, help="YAML with tune_filter:")],
+    answers: Annotated[
+        Optional[list[Path]],  # noqa: UP045
+        typer.Option(help="answers.jsonl of a generation shard (repeat for each shard)"),
+    ] = None,
+    out_dir: Annotated[
+        Optional[Path],  # noqa: UP045
+        typer.Option(help="Override tune_filter.out_dir"),
+    ] = None,
+    json_out: Annotated[bool, typer.Option("--json", help="Print the report as JSON")] = False,
+) -> None:
+    """Filter and balance the teacher's conversations; write a sample for a person to read."""
+    from zubaan.tune.curate import run_curate
+
+    cfg = _section(config, "tune_filter")
+    cfg = cfg.model_copy(
+        update={k: v for k, v in {"answers": answers, "out_dir": out_dir}.items() if v}
+    )
+    missing = [str(p) for p in cfg.answers if not p.exists()]
+    if missing:
+        raise typer.BadParameter(f"not found: {', '.join(missing)}")
+    report = run_curate(
+        cfg.answers,
+        cfg.out_dir,
+        cfg.review_n,
+        cfg.near_threshold,
+        cfg.min_answer_words,
+        cfg.prompts,
+        cfg.seed,
+    )
+    if json_out:
+        typer.echo(json.dumps(report, indent=2, ensure_ascii=False))
+        return
+    console.print(
+        f"{report['generated']} generated, {report['passed']} passed, {report['kept']} kept"
+    )
+    console.print(f"Dropped: {report['dropped']}")
+    for slot, s in report["slots"].items():
+        short = f", short by {s['short_by']}" if s["short_by"] else ""
+        console.print(f"  {slot}: kept {s['kept']} of target {s['target']}{short}")
+    console.print(f"Saved conversations, report and review sample to {cfg.out_dir}")
+
+
 def _tune_config(config: Path, model_path: Path | None, train_file: Path | None):
     cfg = _section(config, "tune")
     updates = {k: v for k, v in {"model_path": model_path, "train_file": train_file}.items() if v}

@@ -1,0 +1,13 @@
+# Stage 4, chunk 4: filter and balance the generated conversations, write a review sample.
+#   uv run zubaan tune filter --config configs/tune-filter.yaml
+# Unzip tune_data_shard0.zip and tune_data_shard1.zip (notebook 13) into the folders below first.
+
+tune_filter:
+  answers:
+    - reports/tune_data_shard0/answers.jsonl
+    - reports/tune_data_shard1/answers.jsonl
+  out_dir: data/tune          # conversations.jsonl, curate_report.json, review.md, review.csv
+  review_n: 150
+  near_threshold: 0.6         # word-set Jaccard to a chat-check prompt that counts as a copy
+  min_answer_words: 3
+  seed: 0
