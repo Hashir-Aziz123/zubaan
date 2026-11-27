@@ -129,7 +129,7 @@ Result of the rerun (2026-11-18): `vllm_check.json` passed on a Tesla T4 (comput
 
 ## 2026-11-18: Stage 3 (adapt) design decisions
 
-All defaults from the stage 3 plan in `continue.md` were accepted. Values marked "start" are starting points to be checked in the smoke run, not tuned numbers.
+All defaults from the stage 3 plan in `continue.md` (moved to `docs/stage3-plan.md` on 2026-11-28) were accepted. Values marked "start" are starting points to be checked in the smoke run, not tuned numbers.
 
 **Starting model.** The existing extended `Qwen/Qwen3-1.7B` (the post-trained chat model), not `Qwen3-1.7B-Base`. Reason: no rework, and the Stage 2 exports, Ollama and vLLM setups, and the Stage 4 and 5 plans all target it. Cost: training on raw Urdu text will weaken instruction following and `<think>` behavior. The report must say so. Our metrics (bits per character, Belebele log-likelihood scoring, speed, acceptance) do not need chat ability.
 

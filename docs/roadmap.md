@@ -40,7 +40,7 @@ Each stage ends with something usable and public. Estimates assume part-time wor
 
 **Done (closed 2026-11-25).** Write-up: `docs/stage3-usage.md`; results: the Stage 3 section of the extension report. The control run below is an optional follow-up, not part of closing the stage.
 
-Plan and decisions: `continue.md` and `docs/decisions.md` (2026-11-18). Start from the extended Qwen3-1.7B, train the 10,000 new rows then LoRA, Urdu Wikipedia plus 10% English Wikipedia, fp16 on a Kaggle T4, private Hub checkpoints.
+Plan and decisions: `docs/stage3-plan.md` (written in `continue.md`, moved 2026-11-28) and `docs/decisions.md` (2026-11-18). Start from the extended Qwen3-1.7B, train the 10,000 new rows then LoRA, Urdu Wikipedia plus 10% English Wikipedia, fp16 on a Kaggle T4, private Hub checkpoints.
 
 - [x] Environment check: versions install together, fp16 LoRA steps stable on a T4 (notebook 05 `check` and `smoke`, chunk 0)
 - [x] Training data: pack Urdu and English replay into token blocks, FLORES (dev and devtest) and Belebele overlap guard (`adapt/data.py`, `zubaan adapt prepare`, chunk 1). Real corpus: 16.05M Urdu tokens in 15,677 blocks (more than the 14M estimate), 2,613 English blocks, 47 Urdu lines dropped by the wider guard
@@ -64,12 +64,12 @@ Optional follow-up:
 Added 2026-11-25. Stage 3's plain-text training left the adapted model unable to answer with thinking on (3 of 4 prompts in Ollama) and none of its checks caught it. A short instruction-tuning step on generated Urdu and English conversations, with thinking traces from a larger Qwen3 teacher, repairs this before drafters are built on the model. Full plan: `docs/stage4-plan.md`. Decisions: `docs/decisions.md`, 2026-11-25. Stage numbers changed on that date: draft was Stage 4 and is now 5; bench and release was 5 and is now 6.
 
 - [x] Chunk 0: teacher trial (notebook 12, 2026-11-26): Qwen3-14B-AWQ picked; standalone questions only with thinking off; mix of 10,000 conversations fixed (`docs/decisions.md`)
-- [ ] Chunk 1: chat-behavior check (answer rate with thinking on and off, Urdu-script share, closed think blocks, loops) on a hand-written prompt set; baseline for the base and Stage 3 models. `zubaan tune check` and prompt set v1 (approved by the author) ready 2026-11-26. The laptop was too slow and short of memory for the baseline, so the base and Stage 3 baselines run in the chunk 7 notebook on Kaggle
-- [ ] Chunk 2: prompt generation grounded in Urdu Wikipedia passages, contamination guard. Chunks 2 and 3 run together in notebook 13 (2 shards)
-- [ ] Chunk 3: teacher responses with and without thinking (vLLM on Kaggle)
-- [ ] Chunk 4: filters with counts, and 100 to 200 conversations read by a person. `zubaan tune filter` ready 2026-11-26 (tested on the trial's answers); waiting for notebook 13's data and the read
+- [x] Chunk 1: chat-behavior check (answer rate with thinking on and off, Urdu-script share, closed think blocks, loops) on a hand-written prompt set. `zubaan tune check` and prompt set v1 (approved by the author) ready 2026-11-26. The laptop was too slow and short of memory for the baseline, so the base and Stage 3 baselines run in the chunk 7 notebook on Kaggle
+- [x] Chunk 2: prompt generation grounded in Urdu Wikipedia passages, contamination guard. Chunks 2 and 3 ran together in notebook 13 (2 shards, about 3.6 h each, 2026-11-27)
+- [x] Chunk 3: teacher responses with and without thinking (vLLM on Kaggle): 11,502 answers
+- [x] Chunk 4: filters with counts, and 150 conversations read (2026-11-27). 9,854 conversations kept. The read was done by Claude, not a native Urdu speaker: 71% pass (English 90%, Urdu 66%), recorded as a limitation
 - [x] Chunk 5: SFT code (chat template rendering, assistant-only loss, packing with a leak check, LoRA, resume, merge), tested on a tiny model (`zubaan tune run | merge`, 2026-11-26)
-- [ ] Chunk 6: smoke and main SFT run on a T4, merge and verify. Notebook 14 ready 2026-11-26 (tested end to end on a tiny model with a fake Hub)
+- [ ] Chunk 6: smoke and main SFT run on a T4, merge and verify. Smoke run done 2026-11-27 (658 tokens/s, 12.4 GB peak, Hub resume works, packing check in float32 after a fix); main run (140 steps, about 3.9 h) started 2026-11-28
 - [ ] Chunk 7: evaluation against the success checks (chat behavior plus the Stage 3 quality protocol). Notebook 15 ready 2026-11-26: chat check on base, Stage 3 and Stage 4 through vLLM (this is also the baseline), quality on Stage 3 and Stage 4
 - [ ] Chunk 8: re-export (GGUF parity, Q4_K_M and Q8_0, Ollama, vLLM), chat check on the quantized file
 - [ ] Chunk 9: write-up, report section, scope note (tested on Qwen3 only)
