@@ -381,3 +381,22 @@ The first smoke run of notebook 14 stopped before step 1: the packing check foun
 ## Stage 4: notebook 14 smoke run (2026-11-27)
 
 Kaggle T4, commit c5c1309, rows of 4,096 tokens, 16 rows per step, gradient checkpointing on. The packing check in float32 gave a largest logit difference of 1.06e-4 (tolerance 1e-2). Held-out loss per reply token: 1.060 at step 20 and 1.032 at step 30. Deleting the local checkpoints and resuming from the Hub at step 20 worked. Median speed 658 tokens per second, so the 140-step main run is projected at 3.9 hours. Peak GPU memory was 12.4 GB of the T4's 15 GB, so gradient checkpointing stays on. Main run settings are unchanged: 2 epochs, LoRA learning rate 1e-4, new rows frozen.
+
+## Stage 4: the person-read review of the training data (2026-11-27)
+
+**Reviewed by Claude, not by a native Urdu speaker.** The author asked Claude to read and mark the 150-conversation sample (`data/tune/review.md`, verdicts in `review.csv`). A fail is anything the model should not copy: a wrong fact, a misreading of the passage, a garbled or wrong Urdu word, a wrong honorific, a reply that does not answer. The answer was judged; the reasoning only where it was shown (first 600 characters).
+
+| Slot | Pass | Fail | Pass rate |
+| --- | --- | --- | --- |
+| English, passage, thinking off | 8 | 0 | 100% |
+| English, passage, thinking on | 12 | 3 | 80% |
+| English, standalone, thinking off | 8 | 0 | 100% |
+| Urdu, passage, thinking off | 20 | 10 | 67% |
+| Urdu, passage, thinking on | 37 | 22 | 63% |
+| Urdu, standalone, thinking off | 21 | 9 | 70% |
+| **All** | **106** | **44** | **71%** (English 28 of 31, Urdu 78 of 119) |
+
+- **The Urdu answers are the weak part.** Most Urdu fails are wrong or invented words that a fluent reader would stop at ("ہیروں" for producers, "مورخہ" for morale, "شرط" for "شرح", "جوڑی", "میٹرکول"), misread passages (who did what, which year), and verb errors ("ادا کرے" for "ادا کیا"). Some state wrong facts with confidence (a childless man's wife inheriting everything; the Republic of China for the People's Republic). The English answers are mostly sound. The 14B AWQ teacher writes fluent-looking Urdu with about one answer in three flawed, and the automatic filters cannot see meaning.
+- **Two faults can be found by pattern, and were counted over all 7,854 Urdu training conversations:** the Prophet's honorific ﷺ written after a companion's name (95 matches, nearly all real; samples 35 and 133) and letters from other scripts inside Urdu words, such as Thai or Devanagari (87, of which 6 also appear in the prompt and are legitimate). Together about 2% of the Urdu data.
+- **The main run was not stopped.** Removing the pattern faults would take out about 2% of the data and would not touch the semantic faults, and a changed data file means starting the 4-hour run again. The Stage 4 goal is chat behavior (answering with thinking on and off, replying in Urdu), which notebook 15 measures, plus check 6, a read of the replies next to the base model's. The data quality is a limitation to report: the student is trained on Urdu that is about two thirds clean, so it can learn the teacher's word errors and honorific errors.
+- **For any later regeneration:** add the honorific and foreign-script checks to `tune filter`, and consider a stronger Urdu teacher or a second-pass check of Urdu answers.
