@@ -22,7 +22,6 @@ from zubaan.tune.sft import (  # noqa: E402
     check_packing,
     load_data,
     merge_tuned,
-    prepare_model,
     run_tune,
 )
 
@@ -97,8 +96,36 @@ def test_packed_loss_equals_each_conversation_alone(world):
 
 def test_check_packing_passes_on_this_transformers_version(world):
     data = load_data(world["cfg"], world["tok"])
-    model, _ = prepare_model(_model(world), world["cfg"], None)
-    assert check_packing(model, data["train"], "cpu", "fp32") < 1e-4
+    assert check_packing(_model(world), data["train"], "cpu") < 1e-4
+
+
+class _NoPositions(torch.nn.Module):
+    """A model that drops position ids, so packed conversations attend to each other."""
+
+    def __init__(self, inner):
+        super().__init__()
+        self.inner = inner
+
+    def forward(self, input_ids, position_ids=None, use_cache=None):
+        return self.inner(input_ids=input_ids, use_cache=False)
+
+
+def test_check_packing_catches_a_leak_and_needs_float32(world):
+    data = load_data(world["cfg"], world["tok"])
+    with pytest.raises(ValueError, match="do not isolate|does not isolate"):
+        check_packing(_NoPositions(_model(world)), data["train"], "cpu")
+    # Transformers isolates packed conversations only without a cache: a model left at
+    # use_cache=True (the saved config) leaks unless the call turns the cache off.
+    leaky = _model(world).eval()
+    ids, _, pos = row_arrays(sorted(data["train"], key=len)[:2])
+    with torch.no_grad():
+        cached = leaky(input_ids=torch.tensor([ids]), position_ids=torch.tensor([pos])).logits
+        plain = leaky(
+            input_ids=torch.tensor([ids]), position_ids=torch.tensor([pos]), use_cache=False
+        ).logits
+    assert leaky.config.use_cache and float((cached - plain).abs().max()) > 1e-2
+    with pytest.raises(ValueError, match="float32"):
+        check_packing(_model(world).half(), data["train"], "cpu")
 
 
 def test_load_data_splits_by_passage_and_reports_counts(world):

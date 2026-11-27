@@ -13,7 +13,8 @@ Differences from Stage 3:
 * **One phase.** LoRA trains from step 0; the Stage 2 new rows stay frozen unless
   ``train_new_rows`` (then they train in their own small tensor, as in Stage 3).
 * **Packing is checked before training.** ``check_packing`` compares a conversation's logits
-  alone and packed behind another one; if attention leaks across conversations the run stops.
+  alone and packed behind another one, in float32 (fp16 rounding alone moves logits by about
+  0.1); if attention leaks across conversations the run stops.
 * **A held-out loss** on conversations about passages never seen in training replaces bits per
   character as the curve to watch.
 
@@ -155,7 +156,8 @@ def batch_loss(model, batch, device: str, precision: str):
 
     ``batch`` is ``(ids, labels, positions)`` from ``pad_batch``. Position ``i`` predicts
     token ``i + 1``; only positions whose target is a reply token get logits. Position ids are
-    passed without an attention mask, which Transformers reads as packed conversations.
+    passed without an attention mask and without a cache, which Transformers reads as packed
+    conversations (with a cache it does not, and attention crosses conversations).
     """
     import torch
     import torch.nn.functional as F
@@ -169,7 +171,7 @@ def batch_loss(model, batch, device: str, precision: str):
     if keep.numel() == 0:
         return None, 0
     with _autocast(precision, device):
-        logits = model(input_ids=x, position_ids=pos, logits_to_keep=keep).logits
+        logits = model(input_ids=x, position_ids=pos, logits_to_keep=keep, use_cache=False).logits
     t = targets[:, keep]
     loss = F.cross_entropy(
         logits.float().reshape(-1, logits.shape[-1]),
@@ -180,42 +182,44 @@ def batch_loss(model, batch, device: str, precision: str):
     return loss, int((t != IGNORE).sum())
 
 
-def check_packing(model, examples: Sequence[Example], device: str, precision: str) -> float:
+def check_packing(model, examples: Sequence[Example], device: str) -> float:
     """Largest logit difference for a conversation alone versus packed behind another one.
 
-    Uses the two shortest examples. Raises ValueError above the tolerance (1e-3 in float32,
-    5e-2 under fp16), which means attention crosses conversation boundaries in this
-    Transformers version and packing would train on the wrong context.
+    Runs in the model's own dtype with no autocast, so call it on a float32 model: in fp16 the
+    two shapes round differently, by up to about 0.1 on a 1.7B model (Kaggle T4, 2026-11-27),
+    which hides the signal. A leak, attention crossing the boundary, changes logits by far more
+    than the tolerance (1e-3 on CPU, 1e-2 on GPU, where kernels differ by shape). Uses the two
+    shortest examples. Raises ValueError above the tolerance.
     """
     import torch
 
     if len(examples) < 2:
         return 0.0
+    dtype = next(model.parameters()).dtype
+    if dtype != torch.float32:
+        raise ValueError(f"check_packing needs a float32 model, got {dtype}")
     a, b = sorted(examples, key=len)[:2]
     was_training = model.training
     model.eval()
     try:
-        with torch.no_grad(), _autocast(precision, device):
+        with torch.no_grad():
             alone_ids = torch.tensor([list(b.ids)], device=device)
-            alone = model(input_ids=alone_ids).logits[0].float()
+            alone = model(input_ids=alone_ids, use_cache=False).logits[0]
             ids, _, pos = row_arrays([a, b])
-            packed = (
-                model(
-                    input_ids=torch.tensor([ids], device=device),
-                    position_ids=torch.tensor([pos], device=device),
-                )
-                .logits[0, len(a) :]
-                .float()
-            )
+            packed = model(
+                input_ids=torch.tensor([ids], device=device),
+                position_ids=torch.tensor([pos], device=device),
+                use_cache=False,
+            ).logits[0, len(a) :]
     finally:
         model.train(was_training)
     diff = float((alone - packed).abs().max())
-    tol = 5e-2 if precision == "fp16" and device.startswith("cuda") else 1e-3
+    tol = 1e-2 if device.startswith("cuda") else 1e-3
     if diff > tol:
         raise ValueError(
-            f"packed conversations change each other's logits (max difference {diff:.3g}): this "
-            "Transformers version does not isolate packed sequences; upgrade it or set max_len "
-            "to fit one conversation per row"
+            f"packed conversations change each other's logits (max difference {diff:.3g}, "
+            f"tolerance {tol:g}): this Transformers version does not isolate packed sequences; "
+            "upgrade it or set max_len to fit one conversation per row"
         )
     return diff
 
@@ -455,16 +459,25 @@ def run_tune(
     pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else 0
 
     torch.manual_seed(cfg.seed)
+    t0 = time.time()
     if model_factory is None:
         from transformers import AutoModelForCausalLM
 
-        dtype = torch.float16 if cfg.precision == "fp16" else torch.float32
-        model = AutoModelForCausalLM.from_pretrained(cfg.model_path, dtype=dtype).to(device)
+        model = AutoModelForCausalLM.from_pretrained(cfg.model_path, dtype=torch.float32)
     else:
-        model = model_factory().to(device)
+        model = model_factory()
+    model = model.float().to(device)
+    log(f"Model loaded in {time.time() - t0:.0f} s")
+    # The packing check runs in float32 first; then the weights go to fp16 for training. A cast
+    # through float32 gives the same fp16 values as loading straight in fp16 (one rounding).
+    packing_diff = check_packing(model, data["train"], device)
+    log(f"Packing check (float32): max logit difference {packing_diff:.2e}")
+    if cfg.precision == "fp16":
+        model = model.half()
+    if device.startswith("cuda"):
+        torch.cuda.empty_cache()
+        torch.cuda.reset_peak_memory_stats()  # the logged peak is training's, not the check's
     peft_model, handle = prepare_model(model, cfg, first_new_id_of(cfg.model_path))
-    packing_diff = check_packing(peft_model, data["train"], device, cfg.precision)
-    log(f"Packing check: max logit difference {packing_diff:.2e}")
     optimizer = build_optimizer(peft_model, handle, cfg)
     scaler = (
         torch.amp.GradScaler("cuda")
