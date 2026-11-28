@@ -22,7 +22,7 @@ The pipeline, one CLI command per stage:
 | `zubaan extend` | `learn`, `sweep`, `quality`, `run`: add target-language merges, resize and initialize embeddings, save and verify the model | 2 (done; rows untrained) |
 | `zubaan export` | `gguf` (with tokenizer parity check), `ollama`, `vllm`, `all` | 2 (done; 1.7B parity passed) |
 | `zubaan adapt` | Continued pretraining so the model learns new tokens: new rows, then LoRA, English replay (Kaggle) | 3 (done; optional compute-matched control run pending) |
-| `zubaan tune` | Restore chat behavior: chat check, generated conversations with thinking traces from a larger Qwen3, short SFT (Kaggle) | 4 (in progress: data done, SFT running; `docs/stage4-plan.md`) |
+| `zubaan tune` | Restore chat behavior: chat check, generated conversations with thinking traces from a larger Qwen3, short SFT (Kaggle) | 4 (in progress: SFT done, evaluation next; `docs/stage4-plan.md`) |
 | `zubaan draft` | Drafters sharing the extended vocabulary: distilled small model, n-gram | 5 |
 | `zubaan bench` | Benchmarks against running servers with tokenizer-fair metrics | 6 |
 

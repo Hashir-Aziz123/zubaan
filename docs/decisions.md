@@ -400,3 +400,25 @@ Kaggle T4, commit c5c1309, rows of 4,096 tokens, 16 rows per step, gradient chec
 - **Two faults can be found by pattern, and were counted over all 7,854 Urdu training conversations:** the Prophet's honorific ﷺ written after a companion's name (95 matches, nearly all real; samples 35 and 133) and letters from other scripts inside Urdu words, such as Thai or Devanagari (87, of which 6 also appear in the prompt and are legitimate). Together about 2% of the Urdu data.
 - **The main run was not stopped.** Removing the pattern faults would take out about 2% of the data and would not touch the semantic faults, and a changed data file means starting the 4-hour run again. The Stage 4 goal is chat behavior (answering with thinking on and off, replying in Urdu), which notebook 15 measures, plus check 6, a read of the replies next to the base model's. The data quality is a limitation to report: the student is trained on Urdu that is about two thirds clean, so it can learn the teacher's word errors and honorific errors.
 - **For any later regeneration:** add the honorific and foreign-script checks to `tune filter`, and consider a stronger Urdu teacher or a second-pass check of Urdu answers.
+
+## Stage 4: notebook 14 main run (2026-11-28)
+
+Kaggle T4, commit c5c1309, the settings of the smoke run: 2 epochs, 140 steps, LoRA rank 64, learning rate 1e-4, new rows frozen. The run finished in one session without a resume (`resumed_from_step` 0). Packing check in float32: 1.06e-4. The merge ran and saved `tuned/model` (it refuses to save if the merged logits move by more than 1e-3, and the probe loads the saved folder).
+
+| step | held-out loss per reply token |
+| --- | --- |
+| 20 (smoke) | 1.060 |
+| 50 | 1.002 |
+| 100 | 0.977 |
+| 140 | 0.970 |
+
+The held-out loss still falls at the end and flattens (0.007 over the last 40 steps), so there is no sign of overfitting and little to gain from a third epoch.
+
+**First look (not the evaluation): 4 chat-check prompts, greedy, thinking on and off.** All 8 replies answered, every think block closed, every reply stopped by itself, no loops, Urdu prompts answered in Urdu. The Stage 3 model answered none of its Urdu prompts with thinking on. Read by Claude:
+
+- Capital of Pakistan: Islamabad in both modes. With thinking, one grammar slip ("پاکستان کی ... مرکز", for "کا") and a loose claim that Islamabad is the economic centre.
+- Lahore's province and its capital: with thinking, correct (Punjab, Lahore). **Without thinking, wrong:** "the capital of the province is Islamabad".
+- English prompts: correct in both modes.
+- The reasoning is in English for every prompt, as the teacher's was, and holds small factual slips (Islamabad "established in 1956") that the answers do not repeat.
+
+Chat behavior looks repaired on this tiny sample; facts stay at the level of a 1.7B model. Notebook 15 measures it on all 60 prompts against the base and Stage 3 models.

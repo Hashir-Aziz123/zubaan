@@ -104,8 +104,8 @@ About 10 Kaggle GPU hours: teacher trial about 1, generation about 3 to 5, SFT s
 - [x] Chunks 2 and 3: notebook 13, 2 shards, 11,502 answers
 - [x] Chunk 4: `zubaan tune filter` kept 9,854 conversations; the 150-sample read (by Claude) passed 71%
 - [x] Chunk 5: SFT code, tested on a tiny model
-- [ ] Chunk 6: smoke run done (658 tokens/s, 12.4 GB, held-out loss 1.032 at step 30); main run (140 steps, about 3.9 h) running
-- [ ] Chunk 7: notebook 15 ready, waits for the main run
+- [x] Chunk 6: smoke run (658 tokens/s, 12.4 GB) and main run (140 steps, held-out loss 0.970, merged; 8 of 8 probe replies answered)
+- [ ] Chunk 7: notebook 15 ready to run
 - [ ] Chunk 8: re-export
 - [ ] Chunk 9: write-up
 

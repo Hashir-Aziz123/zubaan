@@ -1,10 +1,10 @@
 # Where we left off (2026-11-28)
 
-Stages 1, 2 and 3 are done. **Stage 4 (restore chat behavior) is in progress:** the training data is made and checked, and the main SFT run (notebook 14, main mode) is running on Kaggle. Plan: `docs/stage4-plan.md`. Every Stage 4 decision and result so far: `docs/decisions.md`, entries from "Stage 4: restore chat behavior" (2026-11-25) onwards. To resume, tell Claude: "read continue.md and pick up from there".
+Stages 1, 2 and 3 are done. **Stage 4 (restore chat behavior) is in progress:** the training data is made and checked, and the SFT main run (notebook 14) finished on 2026-11-28 with the model merged. Next is notebook 15. Plan: `docs/stage4-plan.md`. Every Stage 4 decision and result so far: `docs/decisions.md`, entries from "Stage 4: restore chat behavior" (2026-11-25) onwards. To resume, tell Claude: "read continue.md and pick up from there".
 
 ## Next steps
 
-1. **Notebook 14 main run finishes** (about 4 to 4.5 hours: 140 steps projected at 3.9 h, plus merge and a first look at 4 prompts). The author sends back `probe.json` and `tune_summary.json`. Claude reads them, checks that the merge verified and that the probe replies close their think block and answer, and records the run in `docs/decisions.md`. The run is a committed version (Save & Run All), so its output, including the merged model in `tuned/model/`, stays available as an input to notebook 15.
+1. Done 2026-11-28: notebook 14 main run (held-out loss 0.970, merged into `tuned/model/`, 8 of 8 probe replies answered with think blocks closed; one wrong fact). Its committed output is the Stage 4 input to notebook 15.
 2. **Notebook 15 (evaluation)** on Kaggle: GPU T4 x2, internet on, no secret. Inputs: the outputs of notebook 07 (Stage 3 model) and notebook 14 (Stage 4 model). About 1.5 to 2 hours. It chat-checks base, Stage 3 and Stage 4 through vLLM (this is also the baseline the chunk 1 laptop runs never finished), scores quality on the Stage 3 protocol, and prints PASS or FAIL for checks 1 to 5. Send back `tune_eval.zip`. Record the results in `docs/decisions.md`. Notebook 15 is pinned to `2e0634e`; the only code change since then is in `tune/sft.py`, which notebook 15 does not use, so it does not need regenerating.
 3. **Check 6, the person read:** replies of the Stage 4 model next to the base model's, from `tune_eval.zip`. The author is not an Urdu speaker, so Claude did the training-data review and would do this read too; it must be recorded as Claude's read.
 4. **Chunk 8, re-export:** GGUF with the parity check, Q4_K_M and Q8_0 with the Urdu imatrix, Ollama (does thinking now work with Ollama's default?), vLLM, and the chat check on the quantized file. Same pattern as notebooks 09 and 10.
@@ -23,8 +23,8 @@ Optional, any time: the Stage 3 compute-matched control run (notebook 11, guide 
 | 2, 3 | Questions and teacher answers (notebook 13, 2 shards, about 3.6 h each) | Done. 11,502 answers |
 | 4 | `zubaan tune filter` and the read sample | Done. 9,854 kept; the 150-sample read passed 71% (see below) |
 | 5 | SFT code `zubaan tune run \| merge` | Done |
-| 6 | Notebook 14: smoke, then main | Smoke done; **main running** |
-| 7 | Notebook 15: evaluation | Ready, waits for 14 |
+| 6 | Notebook 14: smoke, then main | Done (held-out loss 0.970, merged) |
+| 7 | Notebook 15: evaluation | **Next** |
 | 8, 9 | Re-export, write-up | Not started |
 
 **Training data.** 11,502 generated, 10,429 passed the filters, 9,854 kept after balancing. Drops: loop 504, mixed-script word 214, failed request 203 (all client timeouts with thinking on), wrong language 114, token limit 19, think block in the wrong mode 10, source mention 9. Every slot full except Urdu grounded with thinking (3,854 of 4,000). Train 9,669 conversations, 4.57M tokens (3.31M in replies), median 422, longest 2,707; held out 185 (2% of passages). 49% with thinking on. Packed into 1,116 rows of 4,096, so 140 steps for 2 epochs at 16 rows per step.
@@ -55,7 +55,7 @@ Optional, any time: the Stage 3 compute-matched control run (notebook 11, guide 
 ## Files you have locally (gitignored)
 
 - `data/tune/`: `conversations.jsonl`, `curate_report.json`, `review.md`, `review.csv` (marked).
-- `reports/teacher_trial/`, `reports/tune_data_shard0/`, `reports/tune_data_shard1/`: notebook 12 and 13 outputs. `reports/smoke_report.json`: notebook 14 smoke. `reports/chat_check_base.partial.jsonl`: 15 base replies from the abandoned laptop baseline.
+- `reports/teacher_trial/`, `reports/tune_data_shard0/`, `reports/tune_data_shard1/`: notebook 12 and 13 outputs. `reports/smoke_report.json`, `reports/tune_summary.json`, `reports/probe.json`: notebook 14 smoke and main. `reports/chat_check_base.partial.jsonl`: 15 base replies from the abandoned laptop baseline.
 - Stage 3: `outputs/adapted-export/` (Q4_K_M and Modelfile), Ollama model `zubaan-urdu-adapted` in `tools/ollama-models`, `reports/notebook7_logs.txt`, `reports/export_*_09.json`, `reports/vllm_check_adapted.json`.
 
 ## Notes for Claude
