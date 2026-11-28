@@ -23,7 +23,7 @@ The pipeline, one CLI command per stage:
 | `zubaan export` | `gguf` (with tokenizer parity check), `ollama`, `vllm`, `all` | 2 (done; 1.7B parity passed) |
 | `zubaan adapt` | Continued pretraining so the model learns new tokens: new rows, then LoRA, English replay (Kaggle) | 3 (done; optional compute-matched control run pending) |
 | `zubaan tune` | Restore chat behavior: chat check, generated conversations with thinking traces from a larger Qwen3, short SFT (Kaggle) | 4 (done; `docs/stage4-usage.md`) |
-| `zubaan draft` | Drafters sharing the extended vocabulary: distilled small model, n-gram | 5 |
+| `zubaan draft` | Drafters sharing the extended vocabulary: distilled small model, n-gram | 5 (planned: `docs/stage5-plan.md`, awaiting approval) |
 | `zubaan bench` | Benchmarks against running servers with tokenizer-fair metrics | 6 |
 
 Goal of the project for its author: a public, credible demonstration of skill in model inference, serving, and local deployment. Correct measurements and honest reporting matter more than impressive numbers.

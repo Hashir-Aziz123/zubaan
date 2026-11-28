@@ -78,7 +78,7 @@ Later, not part of this stage: support for other model families (SentencePiece t
 
 ## Stage 5: draft (2 to 3 weeks)
 
-Was Stage 4 before 2026-11-25. The target is the Stage 4 model.
+Was Stage 4 before 2026-11-25. The target is the Stage 4 model. Plan (draft, 2026-11-28, awaiting approval): `docs/stage5-plan.md`; about 10 to 12 Kaggle GPU hours, ceiling 15.
 
 - [ ] Extend Qwen3-0.6B with the same tokenizer; distill on the Stage 4 target's outputs
 - [ ] n-gram drafter experiment

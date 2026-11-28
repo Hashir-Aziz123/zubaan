@@ -1,12 +1,21 @@
 # Where we left off (2026-11-28)
 
-Stages 1, 2, 3 and 4 are done. **Stage 4 (restore chat behavior) closed on 2026-11-28:** the chat-tuned model answers again with thinking on (60 of 60 prompts, Stage 3 13), replies to Urdu in Urdu, keeps the Stage 3 gains, and keeps that behavior as a 4-bit GGUF in llama.cpp and Ollama. Write-up: `docs/stage4-usage.md`. Report: `docs/reports/tokenizer-extension/` (Stage 4 section). Every decision and result: `docs/decisions.md`. To resume, tell Claude: "read continue.md and pick up from there".
+Stages 1, 2, 3 and 4 are done. **Stage 4 (restore chat behavior) closed on 2026-11-28:** the chat-tuned model answers again with thinking on (60 of 60 prompts, Stage 3 13), replies to Urdu in Urdu, keeps the Stage 3 gains, and keeps that behavior as a 4-bit GGUF in llama.cpp and Ollama. Write-up: `docs/stage4-usage.md`. Report: `docs/reports/tokenizer-extension/` (Stage 4 section). Every decision and result: `docs/decisions.md`. **Stage 5 (drafters) is planned:** `docs/stage5-plan.md`, written 2026-11-28, not yet approved. To resume, tell Claude: "read continue.md and pick up from there".
 
 ## Next steps
 
-1. **Stage 5 (draft) needs a plan first**, like `docs/stage4-plan.md` was for Stage 4: a drafter that shares the extended tokenizer (Qwen3-0.6B extended the same way and distilled on the Stage 4 model's outputs), an n-gram drafter, and acceptance before and after, Urdu against English (`docs/roadmap.md`, Stage 5). The target is the Stage 4 model (`qwen3-1.7b-urdu-chat`); its tokenizer is the Stage 3 extended one.
-2. Optional, any time: the Stage 3 compute-matched control run (notebook 11, guide `docs/stage3-control-run.md`, about 10 Kaggle GPU hours, needs a new private Hub repo).
-3. Optional later Stage 4 data round (not a blocker): worked thinking-off answers for reasoning prompts, the two pattern filters from the data review, a stronger Urdu teacher or a second checking pass, multi-turn data.
+1. **Approve the Stage 5 plan** (`docs/stage5-plan.md`). The author reads it, especially "Decisions proposed" (8 items) and "Success checks" (5 items), and says yes or what to change. Then Claude records the approved decisions in `docs/decisions.md` (dated) and marks "Plan approved" in the plan's Status list.
+2. **Chunk 0, runtime trial** (Kaggle 2x T4, about 1 GPU hour): Claude writes notebook 17. It checks that vLLM 0.34 and llama-server can run speculative decoding with a separate draft model and with n-gram lookup on the extended vocabulary (the untrained extended Qwen3-0.6B as a stand-in drafter), checks Ollama drafter support, and measures the stock pair (Qwen3-0.6B drafting for Qwen3-1.7B) in words per second, Urdu and English, as the baseline. Chunks 1 and 2 (drafter build, acceptance on chat text, offline n-gram simulation) are laptop work and can be done before or alongside it.
+3. Then chunks 3 to 8 in order (plan, "Chunks"). Budget about 10 to 12 GPU hours, ceiling 15.
+
+Optional, any time: the Stage 3 compute-matched control run (notebook 11, guide `docs/stage3-control-run.md`, about 10 Kaggle GPU hours, needs a new private Hub repo). Optional later Stage 4 data round (not a blocker): worked thinking-off answers for reasoning prompts, the two pattern filters from the data review, a stronger Urdu teacher or a second checking pass, multi-turn data.
+
+## Stage 5 in short (from the plan)
+
+- **Why:** a drafter must share the target's exact vocabulary, so no existing small model can draft for the Stage 4 model; and small drafters are weak in Urdu (Stage 1: acceptance 0.573 Urdu against 0.632 English for the stock pair, best modelled speedup 1.17x against 1.21x).
+- **What:** a Qwen3-0.6B drafter with the same 10,000 Urdu tokens, trained in two phases (the Stage 3 recipe, then distillation on the Stage 4 model's own replies), and an n-gram drafter (runtime built-in, no training). Measured by teacher-forced acceptance (same tokenizer only) and by real words per second on vLLM (T4) and llama.cpp (CPU), Urdu against English, against today's stock setup.
+- **Honest expectation:** a 0.6B drafter costs about a third of a 1.7B step, so speedups may be modest; the nearly free n-gram drafter may win. Both get reported.
+- **Key risk to check first:** whether vLLM 0.34 and llama.cpp run a separate draft model with the extended vocabulary (chunk 0, before any training).
 
 ## Stage 4 in short
 

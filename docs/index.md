@@ -10,6 +10,7 @@ Measure and remove the inference tax non-English languages pay on LLMs, with Urd
 - [Stage 3 control run (optional follow-up)](stage3-control-run.md)
 - [Stage 4 plan: restore chat behavior](stage4-plan.md)
 - [Stage 4 usage: give the adapted model its chat behavior back](stage4-usage.md)
+- [Stage 5 plan: drafters for the Urdu model](stage5-plan.md)
 - [The Urdu language tax](reports/urdu-language-tax/index.md)
 - [Tokenizer extension: cost and quality](reports/tokenizer-extension/index.md)
 - [Decisions](decisions.md)
