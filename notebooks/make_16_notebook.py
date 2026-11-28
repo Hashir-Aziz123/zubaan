@@ -35,11 +35,11 @@ LLAMA_SELFCHECK = n9.LLAMA_SELFCHECK.replace(
 assert LLAMA_SELFCHECK.count("llama-server") == 2, "notebook 09's self-check cell changed"
 
 CHECK_CODE = n9.CHECK_CODE.replace(
-    "import zubaan.export.check  # noqa: F401  (export check is in this commit)",
-    "import zubaan.export.check  # noqa: F401  (export check is in this commit)\n"
-    "from zubaan.tune.evaluate import quantized_checks  # noqa: F401  (chunk 8 check is in this commit)",
+    "import zubaan.extend.pipeline  # noqa: F401",
+    "import zubaan.extend.pipeline  # noqa: F401\n"
+    "from zubaan.tune.evaluate import quantized_checks as _q4_checks  # noqa: F401  (chunk 8 check is in this commit)",
 )
-assert "quantized_checks" in CHECK_CODE, "notebook 09's check cell changed"
+assert "_q4_checks" in CHECK_CODE, "notebook 09's check cell changed"
 
 FIND_MODEL = """
 import json

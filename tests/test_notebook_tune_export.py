@@ -32,7 +32,7 @@ def test_cells_compile_pin_the_commit_and_check_llama_server(nb16):
     cells = ["".join(c["source"]) for c in nb["cells"] if c["cell_type"] == "code"]
     assert any('COMMIT = "abc1234"' in c for c in cells)
     assert any('"llama-perplexity", "llama-server")' in c for c in cells)
-    assert any("from zubaan.tune.evaluate import quantized_checks" in c for c in cells)
+    assert any("import quantized_checks as _q4_checks" in c for c in cells)
     for i, src in enumerate(cells):
         py = "\n".join(re.sub(r"^(\s*)!.*", r"\1pass", line) for line in src.splitlines())
         compile(py, f"cell {i}", "exec")
