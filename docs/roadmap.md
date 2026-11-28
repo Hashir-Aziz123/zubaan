@@ -70,7 +70,7 @@ Added 2026-11-25. Stage 3's plain-text training left the adapted model unable to
 - [x] Chunk 4: filters with counts, and 150 conversations read (2026-11-27). 9,854 conversations kept. The read was done by Claude, not a native Urdu speaker: 71% pass (English 90%, Urdu 66%), recorded as a limitation
 - [x] Chunk 5: SFT code (chat template rendering, assistant-only loss, packing with a leak check, LoRA, resume, merge), tested on a tiny model (`zubaan tune run | merge`, 2026-11-26)
 - [x] Chunk 6: smoke and main SFT run on a T4, merge and verify. Smoke run done 2026-11-27 (658 tokens/s, 12.4 GB peak, Hub resume works, packing check in float32 after a fix); main run finished 2026-11-28 (140 steps, held-out loss 1.060 to 0.970, merged and saved; a first look answered 8 of 8 probe replies, think blocks closed)
-- [ ] Chunk 7: evaluation against the success checks (chat behavior plus the Stage 3 quality protocol). Notebook 15 ready 2026-11-26: chat check on base, Stage 3 and Stage 4 through vLLM (this is also the baseline), quality on Stage 3 and Stage 4
+- [x] Chunk 7: evaluation against the success checks (notebook 15, 2026-11-28): checks 1 to 5 PASS (thinking on 60/60 answered against Stage 3's 13/60, Urdu prompts answered in Urdu 97%, FLORES Urdu 1.735 against Stage 3's 1.718). Check 6, read by Claude: Urdu clearly better than the base but loops on long answers and gets facts wrong; English reasoning with thinking off got worse
 - [ ] Chunk 8: re-export (GGUF parity, Q4_K_M and Q8_0, Ollama, vLLM), chat check on the quantized file
 - [ ] Chunk 9: write-up, report section, scope note (tested on Qwen3 only)
 

@@ -422,3 +422,37 @@ The held-out loss still falls at the end and flattens (0.007 over the last 40 st
 - The reasoning is in English for every prompt, as the teacher's was, and holds small factual slips (Islamabad "established in 1956") that the answers do not repeat.
 
 Chat behavior looks repaired on this tiny sample; facts stay at the level of a 1.7B model. Notebook 15 measures it on all 60 prompts against the base and Stage 3 models.
+
+## Stage 4: evaluation results (2026-11-28, notebook 15, 2x Tesla T4, vLLM 0.34.0, commit 2e0634e)
+
+The base, Stage 3 and Stage 4 models were served in turn by vLLM (float16, tensor parallel 2, no reasoning parser) and given the 60 prompts of set v1, greedy, thinking on and off. Quality used the Stage 3 protocol in float32. The Stage 3 model reproduced its notebook 08 numbers within 0.01, so the protocol did not drift. Files: `reports/tune_eval/` (gitignored).
+
+| Model | Mode | Answered | Urdu prompts in Urdu | Hit the limit | Loops |
+| --- | --- | --- | --- | --- | --- |
+| base | thinking on | 58/60 | 32/39 | 22 | 29 |
+| base | thinking off | 60/60 | 37/39 | 22 | 26 |
+| Stage 3 | thinking on | 13/60 | 8/39 | 8 | 11 |
+| Stage 3 | thinking off | 60/60 | 37/39 | 12 | 12 |
+| Stage 4 | thinking on | 60/60 | 38/39 | 9 | 23 |
+| Stage 4 | thinking off | 60/60 | 38/39 | 7 | 13 |
+
+| | Urdu FLORES bpc | Urdu held-out bpc | English FLORES bpc | Belebele Urdu | Belebele English |
+| --- | --- | --- | --- | --- | --- |
+| base (notebook 08) | 2.339 | 2.310 | 1.208 | 0.334 [0.304, 0.366] | |
+| Stage 3 | 1.718 | 1.486 | 1.066 | 0.340 [0.310, 0.372] | 0.459 [0.427, 0.492] |
+| Stage 4 | 1.735 | 1.534 | 1.074 | 0.351 [0.321, 0.383] | 0.500 [0.467, 0.533] |
+
+**Checks 1 to 5: all PASS.** (1) Thinking on: 100% answered, against the base's 96.7% (Stage 3: 21.7%). (2) Thinking off: 100%. (3) Urdu prompts answered in Urdu script: 97.4% in each mode. (4) 16 replies at the token limit, against the base's 44. (5) FLORES Urdu 1.735, 0.017 above Stage 3 and far below the base; English 1.074; Belebele Urdu inside the base's interval. Measured but not part of check 5: held-out Urdu rose 0.048 bits per character (1.486 to 1.534), and Belebele English rose 4.1 points with overlapping intervals (not a detectable change).
+
+**The base model loops a lot here.** With greedy decoding through vLLM, 22 of its replies in each mode run to the token limit, almost all on Urdu prompts (its median Urdu reply is 2,048 tokens with thinking and 768 without, which are the limits). Many base Urdu answers are degenerate repetition. Check 4 compares against that, so passing it is easy: the base is a weak bar for Urdu.
+
+**Check 6, the person read: done by Claude, not by a native Urdu speaker** (the author does not read Urdu). All 240 base and Stage 4 replies were read side by side.
+
+- **Urdu: Stage 4 is clearly better than the base.** Most Stage 4 Urdu answers are readable sentences on topic. Most base Urdu answers to explain, write and chat prompts are repetition or nonsense. Short factual and arithmetic answers are right in both modes (water boils at 100 degrees, February, the heart, 8 pens cost 200 rupees, 13 apples, 3 hours, "علم طاقت ہے").
+- **But Stage 4's Urdu is far from good.** Longer answers (explanations, the leave application, the story, the tea recipe, the exam advice) still slide into repetition. Facts are often wrong: the capital of Punjab given as Islamabad, the Atlantic as the largest ocean, Iqbal born in Multan, invented book titles, rain and short winter days explained wrongly, photosynthesis missing from how plants make food. The polite-rewrite prompt fails in both modes (it returns the same sentence), and with thinking on the Urdu greeting loops in Arabic.
+- **English: about the base's level with thinking on, worse at reasoning with thinking off.** On the 4 English reasoning prompts with checkable answers, Stage 4 with thinking off got 1 right (base 4): it answers in one line without working (median English reply 36 tokens, base 81) and gives 12:45, Saturday and "Ali". With thinking on it got 4 of 4 (base 3; one reply never closed its think block), though it also called Antarctica the largest continent. On the 6 Urdu reasoning prompts both models got 4 of 6 in each mode.
+- **Why thinking-off reasoning got worse, most likely:** the teacher's thinking-off answers in the training data are short and direct, so the student learned to answer at once, while Qwen3's own thinking-off replies write out steps. A later data round could add worked thinking-off answers to reasoning prompts. Until then, use thinking on for reasoning.
+
+**Verdict.** Stage 4 met its goal: the model answers again with thinking on, replies to Urdu in Urdu, and keeps the Stage 3 gains, all measured. Its Urdu answers are better than the base's but not reliable: repetition on long answers and frequent wrong facts, as expected from a 1.7B model trained on teacher Urdu that was about two thirds clean. Both this and the English thinking-off reasoning regression are stated limitations.
+
+**Correction to an earlier entry.** "Stage 4, chunk 1: chat-behavior check" says prompt set v1 was approved by "the author (an Urdu speaker)", and the comment at the top of `chat_check_v1.yaml` says the same. The author does not read Urdu and approved the set from its English glosses. The prompt file is left unchanged so the measured set stays identical.
