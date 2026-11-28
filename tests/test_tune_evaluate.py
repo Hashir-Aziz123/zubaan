@@ -87,3 +87,14 @@ def test_missing_results_are_refused():
 def test_stage3_reproduction():
     assert reproduces_stage3(quality(1.718, 1.066)) == []
     assert reproduces_stage3(quality(1.75, 1.066)) == ["urdu_flores: now 1.750, notebook 08 1.718"]
+
+
+def test_quantized_checks_use_the_recorded_base_numbers():
+    from zubaan.tune.evaluate import BASE_CHAT, quantized_checks
+
+    assert BASE_CHAT == {"think_answer_rate": 58 / 60, "hit_limit": 44}
+    good = quantized_checks(summary(52, 60, hit_limit=10))  # 86.7%: exactly 10 points below
+    assert [c["passed"] for c in good] == [True] * 4
+    assert "vs base 96.7%" in good[0]["detail"] and "20 vs base 44" in good[3]["detail"]
+    bad = quantized_checks(summary(51, 56, hit_limit=23, urdu_right=35))
+    assert [c["passed"] for c in bad] == [False] * 4

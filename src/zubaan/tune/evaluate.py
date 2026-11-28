@@ -10,6 +10,9 @@ Inputs are results the other tools already write:
   as Stage 4 shows the protocol still gives the same numbers.
 
 Check 6 (a person reads replies next to the base model's) is not computed here.
+
+``quantized_checks`` repeats checks 1 to 4 on the quantized GGUF (chunk 8), against the base
+model's numbers from the chunk 7 run.
 """
 
 from __future__ import annotations
@@ -24,6 +27,8 @@ BASE_QUALITY = {
     "belebele_urd_ci": (0.304, 0.366),
 }
 STAGE3_QUALITY = {"urdu_heldout": 1.486, "urdu_flores": 1.718, "english_flores": 1.066}
+# Notebook 15 (2x T4, vLLM 0.34.0, float16, greedy, prompt set v1): docs/decisions.md, 2026-11-28.
+BASE_CHAT = {"think_answer_rate": 58 / 60, "hit_limit": 44}
 
 
 def _bpc(row: Mapping, name: str) -> float:
@@ -48,6 +53,61 @@ def reproduces_stage3(stage3_row: Mapping, tolerance: float = 0.01) -> list[str]
         for k, v in STAGE3_QUALITY.items()
         if abs(_bpc(stage3_row, k) - v) > tolerance
     ]
+
+
+def _hit_limit(summary: Mapping) -> int:
+    return sum(summary[m]["all"]["hit_limit"] for m in ("think", "no_think"))
+
+
+def chat_checks(
+    summary: Mapping,
+    base_think_rate: float,
+    base_hit_limit: int,
+    stage3_think_rate: float | None = None,
+) -> list[dict]:
+    """Checks 1 to 4 of the plan for one chat-check ``summary`` (see ``stage4_checks``)."""
+    checks = []
+    on_t = _rate(summary["think"]["all"])
+    checks.append(
+        {
+            "name": "1. Thinking on: answer rate within 10 points of the base",
+            "passed": on_t >= base_think_rate - 0.10 - 1e-9,
+            "detail": f"{on_t:.1%} vs base {base_think_rate:.1%}"
+            + (f" (Stage 3 {stage3_think_rate:.1%})" if stage3_think_rate is not None else ""),
+        }
+    )
+    off_t = _rate(summary["no_think"]["all"])
+    checks.append(
+        {
+            "name": "2. Thinking off: at least 95% answered",
+            "passed": off_t >= 0.95 - 1e-9,
+            "detail": f"{off_t:.1%}",
+        }
+    )
+    lang = {m: _rate(summary[m]["urd"], "right_language_rate") for m in ("think", "no_think")}
+    checks.append(
+        {
+            "name": "3. Urdu prompts answered in Urdu script (at least 90% in each mode)",
+            "passed": all(v >= 0.90 - 1e-9 for v in lang.values()),
+            "detail": f"thinking on {lang['think']:.1%}, thinking off {lang['no_think']:.1%}",
+        }
+    )
+    limit_t = _hit_limit(summary)
+    checks.append(
+        {
+            "name": "4. Replies stopped at the token limit: no more than the base",
+            "passed": limit_t <= base_hit_limit,
+            "detail": f"{limit_t} vs base {base_hit_limit}",
+        }
+    )
+    return checks
+
+
+def quantized_checks(summary: Mapping, base_chat: Mapping = BASE_CHAT) -> list[dict]:
+    """Checks 1 to 4 on a quantized GGUF served by llama-server, against the base model's numbers
+    from notebook 15 (served by vLLM in float16). The runtimes differ, so a small gap from the
+    float16 Stage 4 numbers is expected; the checks ask whether the file still behaves."""
+    return chat_checks(summary, base_chat["think_answer_rate"], base_chat["hit_limit"])
 
 
 def stage4_checks(
@@ -75,42 +135,12 @@ def stage4_checks(
     for label in (stage3, stage4):
         if label not in quality:
             raise ValueError(f"no quality results for {label!r}; have {sorted(quality)}")
-    b, t = chat[base], chat[stage4]
-    checks = []
-
-    on_b, on_t = _rate(b["think"]["all"]), _rate(t["think"]["all"])
-    checks.append(
-        {
-            "name": "1. Thinking on: answer rate within 10 points of the base",
-            "passed": on_t >= on_b - 0.10 - 1e-9,
-            "detail": f"{on_t:.1%} vs base {on_b:.1%}"
-            + (f" (Stage 3 {_rate(chat[stage3]['think']['all']):.1%})" if stage3 in chat else ""),
-        }
-    )
-    off_t = _rate(t["no_think"]["all"])
-    checks.append(
-        {
-            "name": "2. Thinking off: at least 95% answered",
-            "passed": off_t >= 0.95 - 1e-9,
-            "detail": f"{off_t:.1%}",
-        }
-    )
-    lang = {m: _rate(t[m]["urd"], "right_language_rate") for m in ("think", "no_think")}
-    checks.append(
-        {
-            "name": "3. Urdu prompts answered in Urdu script (at least 90% in each mode)",
-            "passed": all(v >= 0.90 - 1e-9 for v in lang.values()),
-            "detail": f"thinking on {lang['think']:.1%}, thinking off {lang['no_think']:.1%}",
-        }
-    )
-    limit_b = sum(b[m]["all"]["hit_limit"] for m in ("think", "no_think"))
-    limit_t = sum(t[m]["all"]["hit_limit"] for m in ("think", "no_think"))
-    checks.append(
-        {
-            "name": "4. Replies stopped at the token limit: no more than the base",
-            "passed": limit_t <= limit_b,
-            "detail": f"{limit_t} vs base {limit_b}",
-        }
+    b, t4 = chat[base], chat[stage4]
+    checks = chat_checks(
+        t4,
+        base_think_rate=_rate(b["think"]["all"]),
+        base_hit_limit=_hit_limit(b),
+        stage3_think_rate=_rate(chat[stage3]["think"]["all"]) if stage3 in chat else None,
     )
     q3, q4 = quality[stage3], quality[stage4]
     ur3, ur4 = _bpc(q3, "urdu_flores"), _bpc(q4, "urdu_flores")
