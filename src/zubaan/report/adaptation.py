@@ -132,9 +132,8 @@ def _reading(adapt: dict) -> str:
     return "\n".join(out)
 
 
-def _serving(
-    export: dict | None, check: dict | None, vllm: dict | None, ollama: dict | None = None
-) -> str:
+def gguf_parts(export: dict | None, check: dict | None) -> list[str]:
+    """Paragraphs on the GGUF files: parity, quantization cost and CPU speed (stages 3 and 4)."""
     parts = []
     gguf = (export or {}).get("gguf")
     if gguf:
@@ -187,6 +186,13 @@ def _serving(
             f"{listed}. This compares the "
             "files with each other on one Kaggle CPU session; it is not a benchmark."
         )
+    return parts
+
+
+def _serving(
+    export: dict | None, check: dict | None, vllm: dict | None, ollama: dict | None = None
+) -> str:
+    parts = gguf_parts(export, check)
     if vllm:
         think = vllm.get("samples", {}).get("chat_thinking", {})
         ended_in_think = (

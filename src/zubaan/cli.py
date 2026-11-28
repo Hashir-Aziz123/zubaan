@@ -314,11 +314,29 @@ def report_extend(
     adapted_ollama: Annotated[
         Path, typer.Option(help="Stage 3: local Ollama chat check of the adapted model")
     ] = Path("reports/ollama_check_adapted.json"),
+    tune_checks: Annotated[
+        Path, typer.Option(help="Stage 4: stage4_checks.json (notebook 15)")
+    ] = Path("reports/tune_eval/stage4_checks.json"),
+    tune_quality: Annotated[
+        Path, typer.Option(help="Stage 4: tune_quality.json (notebook 15)")
+    ] = Path("reports/tune_eval/tune_quality.json"),
+    tuned_export: Annotated[
+        Path, typer.Option(help="Stage 4: export_summary.json of the chat model (notebook 16)")
+    ] = Path("reports/export_16/export_summary.json"),
+    tuned_check: Annotated[
+        Path, typer.Option(help="Stage 4: export check of the chat model (notebook 16)")
+    ] = Path("reports/export_16/export_check.json"),
+    tuned_chat_q4: Annotated[
+        Path, typer.Option(help="Stage 4: chat check on the Q4_K_M file (notebook 16)")
+    ] = Path("reports/export_16/chat_check_q4.json"),
+    tuned_ollama: Annotated[
+        Path, typer.Option(help="Stage 4: local Ollama chat check of the chat model")
+    ] = Path("reports/ollama_check_chat.json"),
     out: Annotated[Path, typer.Option(help="Report directory")] = Path(
         "docs/reports/tokenizer-extension"
     ),
 ) -> None:
-    """Write the tokenizer extension report: cost, quality, GGUF parity and stage 3 results.
+    """Write the tokenizer extension report: cost, quality, GGUF parity, stage 3 and 4 results.
 
     Optional inputs that do not exist are left out with a note.
     """
@@ -331,6 +349,12 @@ def report_extend(
         (adapted_check, "stage 3 quantization part"),
         (adapted_vllm, "stage 3 vLLM part"),
         (adapted_ollama, "stage 3 Ollama part"),
+        (tune_checks, "stage 4 section"),
+        (tune_quality, "stage 4 section"),
+        (tuned_export, "stage 4 GGUF part"),
+        (tuned_check, "stage 4 quantization part"),
+        (tuned_chat_q4, "stage 4 Q4_K_M chat part"),
+        (tuned_ollama, "stage 4 Ollama part"),
     ]:
         if not f.exists():
             console.print(f"[yellow]{f} not found; the {what} is left out.[/]")
@@ -338,6 +362,10 @@ def report_extend(
         path = build_extension_report(
             sweep, quality, out, export_summary, adapt_quality, adapted_export, adapted_check,
             adapted_vllm, adapted_ollama,
+            tune_paths={
+                "checks": tune_checks, "quality": tune_quality, "export": tuned_export,
+                "export_check": tuned_check, "q4": tuned_chat_q4, "ollama": tuned_ollama,
+            },
         )  # fmt: skip
     except ValueError as e:
         raise typer.BadParameter(str(e)) from e

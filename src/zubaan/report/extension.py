@@ -173,11 +173,14 @@ def build_extension_markdown(
     adapted_check: dict | None = None,
     adapted_vllm: dict | None = None,
     adapted_ollama: dict | None = None,
+    tune: dict | None = None,
 ) -> str:
     """The full report as Markdown. Chart images are referenced by relative file name.
 
     ``adapt`` (the ``zubaan adapt eval`` results) adds the stage 3 section; the other
-    ``adapted_*`` results add its serving part.
+    ``adapted_*`` results add its serving part. ``tune`` adds the stage 4 section: a dict with
+    ``checks`` and ``quality`` (notebook 15) and optionally ``export``, ``export_check``, ``q4``
+    (notebook 16) and ``ollama`` (the local check).
     """
     from zubaan.report.adaptation import adaptation_section, adaptation_summary
 
@@ -210,6 +213,25 @@ def build_extension_markdown(
             "is one\n  small continued-pretraining run (one seed, 26M tokens, one T4), its gain "
             "is not yet\n  attributed to the tokenizer, and its chat behavior has known problems "
             "(see above)."
+        )
+    tune_text = ""
+    if tune and tune.get("checks") and tune.get("quality"):
+        from zubaan.report.tuning import tuning_section, tuning_summary
+
+        summary.append(tuning_summary(tune["checks"], tune["quality"]))
+        tune_text = tuning_section(
+            tune["checks"],
+            tune["quality"],
+            tune.get("export"),
+            tune.get("export_check"),
+            tune.get("q4"),
+            tune.get("ollama"),
+            base=(adapt or {}).get("variants", {}).get("base"),
+        )
+        first_limit += (
+            "\n- Stage 4 is one short chat fine-tune on teacher-written data that is about two "
+            "thirds\n  clean in Urdu; its replies were judged by Claude, not a native speaker, "
+            "and its\n  chat numbers are behavior counts on 60 prompts, not a benchmark."
         )
     return f"""# Extending {quality["model"]} with Urdu tokens
 
@@ -265,7 +287,7 @@ questions each, scored by answer log-probability divided by answer length in cha
 {_init_section(variants)}
 
 {_init_verdict(variants)}
-{export_text}{adapt_text}
+{export_text}{adapt_text}{tune_text}
 ## Limitations
 
 {first_limit}
@@ -289,6 +311,7 @@ uv run zubaan extend sweep   --config configs/extend-qwen3.yaml
 uv run zubaan extend quality --config configs/extend-qwen3.yaml
 uv run zubaan report extend
 # stage 3 (GPU, notebooks 07 to 10): adapt prepare, run, merge, eval; export all and check
+# stage 4 (notebooks 12 to 16): tune check, tune filter (laptop), tune run, tune merge, export all
 ```
 """
 
@@ -348,6 +371,7 @@ def build_extension_report(
     adapted_check_path: Path | None = None,
     adapted_vllm_path: Path | None = None,
     adapted_ollama_path: Path | None = None,
+    tune_paths: dict[str, Path] | None = None,
 ) -> Path:
     """Write ``index.md`` and its charts into ``out_dir``. Missing optional files are skipped."""
     from zubaan.report import charts
@@ -360,6 +384,12 @@ def build_extension_report(
         raise ValueError(f"{quality_path} not found; run zubaan extend quality first")
     export = load_json(export_path)
     adapt = load_json(adapt_path)
+    if tune_paths:
+        from zubaan.report.tuning import check_tune_results
+
+        checks, tq = load_json(tune_paths.get("checks")), load_json(tune_paths.get("quality"))
+        if checks and tq:
+            check_tune_results(checks, tq)
     out_dir.mkdir(parents=True, exist_ok=True)
     charts.extension_cost_chart(sweep["rows"], out_dir / "extension_cost.png")
     charts.extension_quality_chart(quality["variants"], out_dir / "extension_quality.png")
@@ -380,6 +410,7 @@ def build_extension_report(
         load_json(adapted_check_path),
         load_json(adapted_vllm_path),
         load_json(adapted_ollama_path),
+        {k: load_json(v) for k, v in (tune_paths or {}).items()},
     )
     path = out_dir / "index.md"
     with path.open("w", encoding="utf-8", newline="\n") as f:
