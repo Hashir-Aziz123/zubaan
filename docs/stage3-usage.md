@@ -23,7 +23,7 @@ Three things did not go well, and none of them was a goal of this stage:
 - **Chat behavior degraded.** With thinking on, the model usually ends its turn without an answer; it also invents facts and loops on open-ended prompts. This was expected from training a chat model on plain text (decision of 2026-11-18).
 - **The gain is not yet attributed to the tokenizer.** The optional control run answers that.
 
-So the adapted model is a sound base, but not yet fit to present as a chat assistant. Stage 4 repairs its chat behavior with a short instruction-tuning step ([plan](stage4-plan.md)) before the drafter (Stage 5) and benchmark (Stage 6) stages use it.
+So the adapted model is a sound base, but not yet fit to present as a chat assistant. Stage 4 repaired its chat behavior with a short instruction-tuning step (done 2026-11-28, see [Stage 4 usage](stage4-usage.md)); the drafter (Stage 5) and benchmark (Stage 6) stages use that model.
 
 ## What Stage 3 did, and how
 

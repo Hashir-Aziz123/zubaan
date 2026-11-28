@@ -1,6 +1,6 @@
 # Stage 4 plan: restore chat behavior (instruction tuning with generated data)
 
-Draft, 2026-11-25; status updated 2026-11-28 (see "Status" at the end). Decisions and results are recorded in `docs/decisions.md`, from "Stage 4: restore chat behavior" (2026-11-25) onwards. Where this plan and a later decision differ, the decision holds. Stage numbers changed on that date: the drafter stage is now Stage 5, and benchmarks and release are Stage 6.
+Written 2026-11-25; **the stage is done** (closed 2026-11-28, see "Status" at the end and `docs/stage4-usage.md`). Decisions and results are recorded in `docs/decisions.md`, from "Stage 4: restore chat behavior" (2026-11-25) onwards. Where this plan and a later decision differ, the decision holds. Stage numbers changed on that date: the drafter stage is now Stage 5, and benchmarks and release are Stage 6.
 
 ## Why this stage exists
 
