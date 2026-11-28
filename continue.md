@@ -7,8 +7,8 @@ Stages 1, 2 and 3 are done. **Stage 4 (restore chat behavior) is in progress:** 
 1. Done 2026-11-28: notebook 14 main run (held-out loss 0.970, merged into `tuned/model/`, 8 of 8 probe replies answered with think blocks closed; one wrong fact). Its committed output is the Stage 4 input to notebook 15.
 2. Done 2026-11-28, results in `docs/decisions.md` ("Stage 4: evaluation results"). **Notebook 15 (evaluation)** on Kaggle: GPU T4 x2, internet on, no secret. Inputs: the outputs of notebook 07 (Stage 3 model) and notebook 14 (Stage 4 model). About 1.5 to 2 hours. It chat-checks base, Stage 3 and Stage 4 through vLLM (this is also the baseline the chunk 1 laptop runs never finished), scores quality on the Stage 3 protocol, and prints PASS or FAIL for checks 1 to 5. Send back `tune_eval.zip`. Record the results in `docs/decisions.md`. Notebook 15 is pinned to `2e0634e`; the only code change since then is in `tune/sft.py`, which notebook 15 does not use, so it does not need regenerating.
 3. Done 2026-11-28: **check 6, the person read**, by Claude. Urdu is better than the base but loops on long answers and gets facts wrong; English reasoning with thinking off got worse (1 of 4 right, base 4).
-4. **Chunk 8, re-export:** GGUF with the parity check, Q4_K_M and Q8_0 with the Urdu imatrix, Ollama (does thinking now work with Ollama's default?), vLLM, and the chat check on the quantized file. Same pattern as notebooks 09 and 10.
-5. **Chunk 9, write-up:** `docs/stage4-usage.md`, a Stage 4 section in the extension report, the scope note (tested on Qwen3 only), roadmap, the `CLAUDE.md` stage table.
+4. **Chunk 8, re-export: notebook 16 is ready** (pinned to `aebd864`; Kaggle CPU, about 3 to 3.5 h; input: notebook 14's output only). It exports GGUF with parity, Q4_K_M and Q8_0, and runs the chat check on Q4_K_M with checks 1 to 4. The author sends back `export_results.zip` and downloads `export/qwen3-1.7b-urdu-chat-Q4_K_M.gguf` into `outputs/`; then Claude runs the local Ollama check (does thinking work with Ollama's default?). vLLM is covered by notebook 15.
+5. **Chunk 9, write-up:** `docs/stage4-usage.md` is drafted (its Serving section waits for notebook 16). Still to do: the Stage 4 section of the extension report (`report/`), final roadmap and `CLAUDE.md` stage table, close the stage in `docs/decisions.md`.
 
 If a check fails in step 2, stop and decide with the author before changing anything (options in `docs/stage4-plan.md`: train the new rows, more epochs, a second round of data).
 
@@ -25,8 +25,8 @@ Optional, any time: the Stage 3 compute-matched control run (notebook 11, guide 
 | 5 | SFT code `zubaan tune run \| merge` | Done |
 | 6 | Notebook 14: smoke, then main | Done (held-out loss 0.970, merged) |
 | 7 | Notebook 15: evaluation | Done: checks 1 to 5 PASS, check 6 read by Claude |
-| 8 | Re-export | **Next** |
-| 9 | Write-up | Not started |
+| 8 | Re-export (notebook 16) | **Next**: ready to run |
+| 9 | Write-up | `docs/stage4-usage.md` drafted |
 
 **Training data.** 11,502 generated, 10,429 passed the filters, 9,854 kept after balancing. Drops: loop 504, mixed-script word 214, failed request 203 (all client timeouts with thinking on), wrong language 114, token limit 19, think block in the wrong mode 10, source mention 9. Every slot full except Urdu grounded with thinking (3,854 of 4,000). Train 9,669 conversations, 4.57M tokens (3.31M in replies), median 422, longest 2,707; held out 185 (2% of passages). 49% with thinking on. Packed into 1,116 rows of 4,096, so 140 steps for 2 epochs at 16 rows per step.
 
