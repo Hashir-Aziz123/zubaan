@@ -106,7 +106,7 @@ About 10 Kaggle GPU hours: teacher trial about 1, generation about 3 to 5, SFT s
 - [x] Chunk 5: SFT code, tested on a tiny model
 - [x] Chunk 6: smoke run (658 tokens/s, 12.4 GB) and main run (140 steps, held-out loss 0.970, merged; 8 of 8 probe replies answered)
 - [x] Chunk 7: notebook 15, checks 1 to 5 PASS; check 6 read by Claude (Urdu better than the base but still weak; English reasoning with thinking off worse)
-- [ ] Chunk 8: re-export
-- [ ] Chunk 9: write-up
+- [x] Chunk 8: notebook 16, parity passed, checks 1 to 4 pass on Q4_K_M; Ollama thinking works with the default
+- [x] Chunk 9: `docs/stage4-usage.md`, report section; stage closed 2026-11-28
 
 GPU hours so far: teacher trial about 1 to 1.5, generation about 7.2 (2 shards of about 3.6 h, above the 3 to 5 planned), smoke about 0.5, main about 4 when done. With evaluation (about 2) the stage comes to about 15 GPU hours, above the 10 budgeted, mainly because generation used longer reply limits.

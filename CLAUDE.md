@@ -18,11 +18,11 @@ The pipeline, one CLI command per stage:
 | `zubaan audit fertility` | Tokens per word, chars per token, cost vs a parallel reference corpus | 1 (done) |
 | `zubaan audit compare` | Fertility for several tokenizers on the same data, CSV and JSON table | 1 |
 | `zubaan audit acceptance` | Draft/target acceptance rate on a corpus | 1 |
-| `zubaan report tax` / `report extend` | "The Urdu language tax" and "Tokenizer extension" reports: Markdown plus charts in `docs/reports/` | 1, 2 |
+| `zubaan report tax` / `report extend` | "The Urdu language tax" and "Tokenizer extension" reports: Markdown plus charts in `docs/reports/` | 1 to 4 |
 | `zubaan extend` | `learn`, `sweep`, `quality`, `run`: add target-language merges, resize and initialize embeddings, save and verify the model | 2 (done; rows untrained) |
 | `zubaan export` | `gguf` (with tokenizer parity check), `ollama`, `vllm`, `all` | 2 (done; 1.7B parity passed) |
 | `zubaan adapt` | Continued pretraining so the model learns new tokens: new rows, then LoRA, English replay (Kaggle) | 3 (done; optional compute-matched control run pending) |
-| `zubaan tune` | Restore chat behavior: chat check, generated conversations with thinking traces from a larger Qwen3, short SFT (Kaggle) | 4 (in progress: evaluated, checks pass; re-export next; `docs/stage4-plan.md`) |
+| `zubaan tune` | Restore chat behavior: chat check, generated conversations with thinking traces from a larger Qwen3, short SFT (Kaggle) | 4 (done; `docs/stage4-usage.md`) |
 | `zubaan draft` | Drafters sharing the extended vocabulary: distilled small model, n-gram | 5 |
 | `zubaan bench` | Benchmarks against running servers with tokenizer-fair metrics | 6 |
 
@@ -66,7 +66,8 @@ src/zubaan/
                 sft.py (LoRA SFT loop, merge)
   draft/        stage 5: distill.py, ngram.py (planned)
   bench/        stage 6: runner.py, quality.py (planned)
-  report/       charts.py, tax.py, extension.py: Markdown reports with PNG charts
+  report/       charts.py, tax.py, extension.py, adaptation.py (stage 3), tuning.py (stage 4):
+                Markdown reports with PNG charts
   data/         flores.py: FLORES download; urdu.py: Urdu Wikipedia training corpus
 tests/          pytest; fixtures/ holds tiny text samples; conftest.py has a fake llama.cpp folder
 tools/          llama.cpp release b12477 (converter and binaries), gitignored

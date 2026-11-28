@@ -463,3 +463,54 @@ The base, Stage 3 and Stage 4 models were served in turn by vLLM (float16, tenso
 - **The chat check on the Q4_K_M file runs on the same CPU session, through llama-server** (`--jinja --reasoning-format none`, the GGUF's own template, the thinking switch checked first). Same 60 prompts, greedy, same limits as notebook 15. Notebook 09 measured about 15 tokens per second for Q4_K_M on 4 Kaggle CPUs, and the Stage 4 model wrote 53,097 tokens in the notebook 15 check, so about 1 to 1.5 hours. A GPU build of llama.cpp is not needed for that and would cost GPU hours.
 - **Checks 1 to 4 are applied to the Q4_K_M file** (`quantized_checks`), against the base model's notebook 15 numbers (thinking-on answer rate 58/60, 44 replies at the token limit). The runtime differs (llama.cpp on a 4-bit file against vLLM in float16), so a small gap from Stage 4's float16 numbers is expected; the question is whether the file still behaves.
 - **vLLM is already covered** by notebook 15, which served the merged Stage 4 folder with vLLM 0.34.0. Ollama is checked on the laptop with the downloaded Q4_K_M, as in Stage 3, to answer whether thinking works with Ollama's default.
+
+## Stage 4, chunk 8: re-export results (2026-11-28, notebook 16, Kaggle CPU, commit aebd864)
+
+Files: `reports/export_16/` (gitignored): `export_summary.json`, `export_check.json`, `Modelfile`, `chat_check_q4.json` and its Markdown and server log.
+
+- **Tokenizer parity: passed.** 2,041 of 2,045 texts give identical ids with Hugging Face and llama.cpp `b12477`. The other 4 are the same NFC-only texts as in Stages 2 and 3, and 0 differ for real. Pre-tokenizer `qwen2`, recognized without a converter patch. Training did not touch the tokenizer, so this was expected; it is now shown.
+- **Quantization cost** against the f16 file (llama.cpp KL-divergence mode, 20 chunks of 512 tokens), next to the Stage 3 model's numbers from notebook 09. Both models use the same tokenizer, so these per-token numbers compare across the two models.
+
+| Text | File | Mean KL divergence | Same top token | Perplexity ratio | Stage 3 (KLD, same top) |
+| --- | --- | ---: | ---: | ---: | --- |
+| FLORES Urdu | Q4_K_M | 0.0288 | 87.3% | 1.0229 | 0.0341, 85.9% |
+| FLORES Urdu | Q8_0 | 0.0015 | 97.1% | 1.0032 | 0.0017, 96.7% |
+| FLORES English | Q4_K_M | 0.0296 | 89.9% | 1.0270 | 0.0320, 89.8% |
+| FLORES English | Q8_0 | 0.0018 | 97.2% | 0.9999 | 0.0018, 97.2% |
+
+  Q4_K_M costs Urdu about what it costs English, as in Stage 3, and slightly less than for the Stage 3 model. The f16 perplexity is 50.4 on FLORES Urdu (Stage 3 55.5) and 19.7 on English (20.3), per token of the same tokenizer. CPU generation speed on 4 Kaggle threads: F16 6.3, Q4_K_M 15.0, Q8_0 10.7 tokens per second.
+- **Chat check on the Q4_K_M file** (llama-server, `--jinja --reasoning-format none`, one slot, 4 threads, 72 minutes; same 60 prompts, greedy, same limits as notebook 15). Checks 1 to 4 against the base's notebook 15 numbers: **all PASS** (thinking on 100% answered against the base's 96.7%; thinking off 100%; Urdu prompts in Urdu 97.4% and 100%; 16 replies at the limit against 44).
+
+| File | Mode | Answered | Urdu prompts in Urdu | Hit the limit | Loops |
+| --- | --- | --- | --- | --- | --- |
+| Stage 4 float16 (vLLM, notebook 15) | thinking on | 60/60 | 38/39 | 9 | 23 |
+| Stage 4 float16 (vLLM, notebook 15) | thinking off | 60/60 | 38/39 | 7 | 13 |
+| Stage 4 Q4_K_M (llama-server) | thinking on | 60/60 | 38/39 | 11 | 18 |
+| Stage 4 Q4_K_M (llama-server) | thinking off | 60/60 | 39/39 | 5 | 10 |
+
+  The differences from the float16 rows go both ways and are small; a different runtime and a 4-bit file change greedy paths, so the replies are not identical. The 4-bit file keeps the restored behavior.
+
+## Stage 4: local Ollama check of the chat model (2026-11-28)
+
+The Q4_K_M from notebook 16 (`outputs/adapted-export/qwen3-1.7b-urdu-chat-Q4_K_M.gguf`), Ollama 0.40.16 (portable build, model store in `tools/`, model `zubaan-urdu-chat`), the 8 GB laptop's CPU, the four prompts of the Stage 3 check, greedy, at most 2,048 new tokens with thinking and 768 without (the notebook 15 limits; Stage 3's check used 300). Replies: `reports/ollama_check_chat.json` (gitignored, local).
+
+- **Ollama again used the chat template embedded in the GGUF** (capabilities `tools`, `thinking`, `completion`), so thinking is on by default and is switched off per request with `"think": false`.
+- **Thinking on (Ollama's default): 4 of 4 answered,** against 1 of 4 for the Stage 3 model in the same check. Each reply has an English reasoning block (Ollama's `thinking` field), then the answer in the language of the question. 114 to 179 tokens, nothing near the limit.
+- **`think: false`: 4 of 4 answered,** 8 to 72 tokens.
+- **No loops, nothing at the token limit.** 9.7 to 15.4 tokens per second.
+- **Read by Claude** (not a native speaker): the three factual answers are right in both modes (Islamabad, Lahore in Punjab, Paris). The thinking-on Islamabad answer adds that it is the economic and cultural center, which is wrong for the economic part (Karachi), and the Lahore answer adds a muddled second sentence. Both three-sentence answers about Urdu are vague and have grammar slips (for example "کا تاریخی اہمیت" where "کی" is needed); the thinking-off one repeats a word ("اداروں اور اداروں"). Stage 3's thinking-off answer to the same prompt fell into a loop; this one stops by itself.
+- Ollama's `create` reported "using existing layer" for the small parameters layer only; the model layer is the new file (sha256 `4b01906b...`), not the Stage 3 one (`53f4156e...`).
+
+## Stage 4: report section (2026-11-28)
+
+- **The Stage 4 section of the extension report** (`report/tuning.py`, added to `zubaan report extend`) reads every number from notebook 15's `stage4_checks.json` and `tune_quality.json`, notebook 16's export summary, export check and Q4_K_M chat check, and the Ollama check. Direction words (barely moved, got worse) and PASS or FAIL are derived from the numbers. The training recipe and check 6 (Claude's read) are prose. The GGUF, quantization-cost and speed paragraphs are shared with the Stage 3 section (`adaptation.gguf_parts`).
+- **Notebook 16 regenerated at the same pin `aebd864`** after ruff flagged its version-check cell (an import out of order and a name imported twice). Only that import line changed; the run used the earlier cell, and both import the same code.
+
+## Stage 4 closed (2026-11-28)
+
+Stage 4 is closed with its goal met: the model answers again with thinking on (60 of 60 prompts, Stage 3 13), replies to Urdu in Urdu, keeps the Stage 3 gains, and keeps that behavior as a 4-bit GGUF in llama.cpp and Ollama, where thinking now works with Ollama's default. Write-up: `docs/stage4-usage.md`; report: `docs/reports/tokenizer-extension/`.
+
+- **Known limits, stated in the write-up:** the Urdu was judged by Claude, not a native speaker; the training data is about two thirds clean in Urdu; Urdu answers still repeat on long replies and get facts wrong; English reasoning with thinking off got worse than the base's; single-turn data, one run, 60 prompts; safety behavior not measured; tested on Qwen3 only.
+- **Cost:** about 15 Kaggle GPU hours against the 10 budgeted, mainly because generation used longer reply limits (7.2 hours instead of 3 to 5). The re-export ran on CPU.
+- **The Stage 4 model (`qwen3-1.7b-urdu-chat`) is the target for Stage 5.** Its tokenizer is the Stage 3 extended tokenizer, so the drafter plan is unchanged: a drafter must share it exactly. Thinking can stay on when serving it.
+- **Possible later rounds, not blockers:** worked thinking-off answers for reasoning prompts, the two pattern filters from the data review, a stronger Urdu teacher or a second checking pass, multi-turn data.

@@ -11,6 +11,7 @@ quality. A cost saving is only a result if quality is shown next to it.
 - English is almost untouched: bits per character moves from 1.208 to between 1.210 and 1.214.
 - GGUF export passes the tokenizer parity check: llama.cpp `b12477` and Hugging Face give identical token ids on 2,041 of 2,045 texts, and the other 4 differ only because the text is not in NFC form (see the GGUF section).
 - After stage 3 training, the extended model needs **2.43x fewer tokens** for the same FLORES Urdu text and scores **0.62 fewer bits per character** than the base (2.339 to 1.718). Belebele Urdu is 34.0% against the base's 33.4%. Whether the gain comes from the new tokens or from the extra Urdu training is not yet known (see the stage 3 section).
+- Stage 4 (a short chat fine-tune) **restored thinking mode**: with thinking on it answered 60 of 60 prompts, against 13 for Stage 3 and 58 for the base. 5 of 5 success checks pass, and FLORES Urdu stays at 1.735 bits per character (Stage 3 1.718). Its Urdu answers are better than the base's but not reliable (read by Claude, not a native speaker).
 
 ## What was done
 
@@ -145,11 +146,91 @@ Success checks set before training (`docs/decisions.md`):
 
 **Generated text, read by a person** (greedy decoding, details in `docs/decisions.md`): fluent Urdu that answers simple questions, but with repetition loops on open-ended prompts and invented facts (for example Islamabad called the largest city, and inconsistent population figures). This is a 1.7B model after a small continued-pretraining run, not a source of facts.
 
+## Stage 4: restoring chat behavior
+
+Stage 3 trained a chat model on plain text, and with thinking on (Qwen3's default) it then
+usually ended its turn after the reasoning, with no answer. Stage 4 fine-tuned the Stage 3 model
+on 9,854 conversations (80% Urdu, 20% English, about half with thinking) written by Qwen3-14B-AWQ
+and grounded in Urdu Wikipedia passages of the Stage 3 training split, with the loss on the reply
+only: LoRA rank 64 on all attention and MLP projections, the new embedding rows frozen, 2 epochs
+(140 steps of 16 rows of 4,096 packed tokens) on one T4 in fp16. A sample of 150 conversations was
+read before training: 71% passed (Urdu 66%, English 90%), so the training data has wrong words and
+facts in about one Urdu answer in three. Design and reasons: `docs/stage4-plan.md` and
+`docs/decisions.md`.
+
+**Chat behavior** on 60 hand-written prompts (40 Urdu, 20 English, never shown to the teacher),
+greedy decoding, at most 2,048 new tokens with thinking and 768 without. "Answered" means any
+reasoning block was closed and an answer followed. A loop is an 8-word run repeated more than
+twice.
+
+| Model | Served by | Thinking | Answered | Urdu prompts in Urdu | Ran to the limit | Loops |
+| --- | --- | --- | ---: | ---: | ---: | ---: |
+| base | vLLM 0.34.0, float16, Tesla T4 | on | 58/60 | 32/39 | 22 | 29 |
+| base | vLLM 0.34.0, float16, Tesla T4 | off | 60/60 | 37/39 | 22 | 26 |
+| Stage 3 | vLLM 0.34.0, float16, Tesla T4 | on | 13/60 | 8/39 | 8 | 11 |
+| Stage 3 | vLLM 0.34.0, float16, Tesla T4 | off | 60/60 | 37/39 | 12 | 12 |
+| Stage 4 | vLLM 0.34.0, float16, Tesla T4 | on | 60/60 | 38/39 | 9 | 23 |
+| Stage 4 | vLLM 0.34.0, float16, Tesla T4 | off | 60/60 | 38/39 | 7 | 13 |
+| Stage 4 Q4_K_M | llama-server, CPU | on | 60/60 | 38/39 | 11 | 18 |
+| Stage 4 Q4_K_M | llama-server, CPU | off | 60/60 | 39/39 | 5 | 10 |
+
+**Quality** with the Stage 3 protocol (same texts, float32). The base row is from Stage 3.
+
+| Model | Urdu bits/char (FLORES) | Urdu bits/char (held-out) | English bits/char | Belebele Urdu | Belebele English |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| base | 2.339 | 2.310 | 1.208 | 33.4% (30.4 to 36.6) | 44.7% (41.4 to 47.9) |
+| Stage 3 | 1.718 | 1.486 | 1.066 | 34.0% (31.0 to 37.2) | 45.9% (42.7 to 49.2) |
+| Stage 4 | 1.735 | 1.534 | 1.074 | 35.1% (32.1 to 38.3) | 50.0% (46.7 to 53.3) |
+
+Success checks set before training (`docs/stage4-plan.md`):
+
+- **PASS**: 1. Thinking on: answer rate within 10 points of the base. 100.0% vs base 96.7% (Stage 3 21.7%).
+- **PASS**: 2. Thinking off: at least 95% answered. 100.0%.
+- **PASS**: 3. Urdu prompts answered in Urdu script (at least 90% in each mode). thinking on 97.4%, thinking off 97.4%.
+- **PASS**: 4. Replies stopped at the token limit: no more than the base. 16 vs base 44.
+- **PASS**: 5. Stage 3 gains kept. FLORES Urdu 1.735 (Stage 3 1.718, base 2.339); FLORES English 1.074 (base 1.208); Belebele Urdu 0.351 [0.321, 0.383] (base interval from 0.304). Failed: none.
+
+### How to read it
+
+- **Plain-text likelihood barely moved.** FLORES Urdu went from 1.718 (Stage 3) to 1.735 bits per character, held-out Urdu from 1.486 to 1.534, English from 1.066 to 1.074. Chat tuning traded a little likelihood of Wikipedia-style text for answering questions.
+- **The base is a weak bar for Urdu here.** Under greedy decoding the base Qwen3-1.7B loops on most open-ended Urdu prompts, so the token-limit check is easy to pass. The thinking-on answer rate and the reading below say more.
+- **Answered is not right.** A fluent wrong answer counts as answered.
+- **What a reader sees** (all 240 base and Stage 4 replies, read side by side by Claude, not a native speaker): Stage 4 writes readable, on-topic Urdu where the base mostly loops, and short facts and sums are right. Long answers still slide into repetition and facts are often wrong (the capital of Punjab given as Islamabad, Iqbal born in Multan). The reasoning is in English, as the teacher's was. With thinking off, English reasoning prompts got worse: 1 of 4 right, against 4 of 4 for the base, because the training answers without thinking were short and direct.
+
+### Serving the Stage 4 model
+
+**GGUF.** llama.cpp `b12477`, pre-tokenizer `qwen2` recognized without a converter patch. Tokenizer parity: 2,041 of 2,045 texts give identical ids, the other 4 differ only because the text is not NFC, and 0 differ for real. Training does not touch the tokenizer, so this matches stage 2. Files: `qwen3-1.7b-urdu-chat-Q4_K_M.gguf`, `qwen3-1.7b-urdu-chat-Q8_0.gguf`, with an importance matrix from Urdu Wikipedia (training split).
+
+**Quantization cost against the f16 file** (llama.cpp KL-divergence mode, 20 chunks of 512 tokens). All files share one tokenizer, so these per-token numbers compare the files with each other; they are not a language comparison.
+
+| Text | Quantization | Mean KL divergence | Same top token | Perplexity ratio |
+| --- | --- | ---: | ---: | ---: |
+| FLORES Urdu | Q8_0 | 0.0015 | 97.1% | 1.0032 |
+| FLORES Urdu | Q4_K_M | 0.0288 | 87.3% | 1.0229 |
+| FLORES English | Q8_0 | 0.0018 | 97.2% | 0.9999 |
+| FLORES English | Q4_K_M | 0.0296 | 89.9% | 1.0270 |
+
+**CPU generation speed** (llama.cpp, 4 threads, greedy (temperature 0), median over the sample prompts, tokens per second): F16 6.3, Q4_K_M 15.0, Q8_0 10.7. This compares the files with each other on one Kaggle CPU session; it is not a benchmark.
+
+**vLLM** 0.34.0 served the merged model in float16 on a Tesla T4 for the chat check above, with the chat template from the model folder; thinking is switched per request with `"chat_template_kwargs": {"enable_thinking": false}`.
+
+**The Q4_K_M file through llama-server** (the same 60 prompts and limits, greedy, 72 minutes on 4 CPU threads): checks 1 to 4 against the base model's vLLM numbers, all pass. The runtimes differ, so small differences from the float16 rows are expected.
+
+- **PASS**: 1. Thinking on: answer rate within 10 points of the base. 100.0% vs base 96.7%.
+- **PASS**: 2. Thinking off: at least 95% answered. 100.0%.
+- **PASS**: 3. Urdu prompts answered in Urdu script (at least 90% in each mode). thinking on 97.4%, thinking off 100.0%.
+- **PASS**: 4. Replies stopped at the token limit: no more than the base. 16 vs base 44.
+
+**Ollama** 0.40.16 on a laptop CPU (Q4_K_M, greedy (temperature 0); num_predict 2048 with thinking, 768 without (notebook 15 limits)): with thinking on (Ollama's default) it answered 4 of 4 prompts (reasoning shown in 4); with `think: false` it answered 4 of 4 prompts. 10 to 15 tokens per second. Ollama uses the chat template embedded in the GGUF, so thinking is on by default and is turned off per request (`think: false`, or `ollama run --think=false`).
+
 ## Limitations
 
 - The stage 2 rows are untrained; the stage 3 section shows the trained model. It is one
   small continued-pretraining run (one seed, 26M tokens, one T4), its gain is not yet
   attributed to the tokenizer, and its chat behavior has known problems (see above).
+- Stage 4 is one short chat fine-tune on teacher-written data that is about two thirds
+  clean in Urdu; its replies were judged by Claude, not a native speaker, and its
+  chat numbers are behavior counts on 60 prompts, not a benchmark.
 - Belebele zero-shot is a coarse test for a 1.7B model: the base model is only a few points above
   chance, and the intervals of the variants overlap.
 - One seed and one Urdu corpus (Wikipedia, which is formal register). Social-media or
@@ -170,4 +251,5 @@ uv run zubaan extend sweep   --config configs/extend-qwen3.yaml
 uv run zubaan extend quality --config configs/extend-qwen3.yaml
 uv run zubaan report extend
 # stage 3 (GPU, notebooks 07 to 10): adapt prepare, run, merge, eval; export all and check
+# stage 4 (notebooks 12 to 16): tune check, tune filter (laptop), tune run, tune merge, export all
 ```

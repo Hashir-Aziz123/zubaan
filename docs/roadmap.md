@@ -59,7 +59,7 @@ Optional follow-up:
 
 - [ ] Compute-matched control run (decision 6): base model with its own tokenizer, same recipe and token count. Code, config and notebook 11 are ready (guide `docs/stage3-control-run.md`); needs about 10 Kaggle GPU hours. It is the only way to attribute the quality gain to the tokenizer. Stage 4 does not change the continued-pretraining recipe, so the control stays valid and can run at any time.
 
-## Stage 4: restore chat behavior (1 to 2 weeks)
+## Stage 4: restore chat behavior (done 2026-11-28)
 
 Added 2026-11-25. Stage 3's plain-text training left the adapted model unable to answer with thinking on (3 of 4 prompts in Ollama) and none of its checks caught it. A short instruction-tuning step on generated Urdu and English conversations, with thinking traces from a larger Qwen3 teacher, repairs this before drafters are built on the model. Full plan: `docs/stage4-plan.md`. Decisions: `docs/decisions.md`, 2026-11-25. Stage numbers changed on that date: draft was Stage 4 and is now 5; bench and release was 5 and is now 6.
 
@@ -71,8 +71,8 @@ Added 2026-11-25. Stage 3's plain-text training left the adapted model unable to
 - [x] Chunk 5: SFT code (chat template rendering, assistant-only loss, packing with a leak check, LoRA, resume, merge), tested on a tiny model (`zubaan tune run | merge`, 2026-11-26)
 - [x] Chunk 6: smoke and main SFT run on a T4, merge and verify. Smoke run done 2026-11-27 (658 tokens/s, 12.4 GB peak, Hub resume works, packing check in float32 after a fix); main run finished 2026-11-28 (140 steps, held-out loss 1.060 to 0.970, merged and saved; a first look answered 8 of 8 probe replies, think blocks closed)
 - [x] Chunk 7: evaluation against the success checks (notebook 15, 2026-11-28): checks 1 to 5 PASS (thinking on 60/60 answered against Stage 3's 13/60, Urdu prompts answered in Urdu 97%, FLORES Urdu 1.735 against Stage 3's 1.718). Check 6, read by Claude: Urdu clearly better than the base but loops on long answers and gets facts wrong; English reasoning with thinking off got worse
-- [ ] Chunk 8: re-export (GGUF parity, Q4_K_M and Q8_0, Ollama, vLLM), chat check on the quantized file. Notebook 16 ready 2026-11-28 (Kaggle CPU; vLLM already served the model in notebook 15)
-- [ ] Chunk 9: write-up, report section, scope note (tested on Qwen3 only). `docs/stage4-usage.md` drafted 2026-11-28; serving numbers and the report section wait for notebook 16
+- [x] Chunk 8: re-export (notebook 16, Kaggle CPU, 2026-11-28): GGUF parity 2,041/2,045 (4 NFC-only, 0 real), Q4_K_M and Q8_0 with the Urdu imatrix; the chat check on Q4_K_M passes checks 1 to 4 (60/60 answered in each mode). Ollama on the laptop: thinking works with the default (4 of 4, Stage 3 1 of 4). vLLM served the model in notebook 15
+- [x] Chunk 9: write-up `docs/stage4-usage.md` with the scope note (tested on Qwen3 only), Stage 4 section of the extension report (`zubaan report extend`), stage closed 2026-11-28
 
 Later, not part of this stage: support for other model families (SentencePiece tokenizers, untied embedding and head, non-ChatML chat formats).
 
